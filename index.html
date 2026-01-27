@@ -2,29 +2,32 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Academic Research</title>
+    <title>Academic Research Portal</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
-        #bar { position: fixed; top: 0; width: 100%; background: #222; padding: 8px; display: flex; z-index: 999; }
-        input { flex: 1; background: #333; color: #fff; border: 1px solid #444; padding: 5px; margin-right: 10px; }
-        iframe { width: 100vw; height: 100vh; border: none; padding-top: 40px; }
+        body { background: #111; color: #0f0; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { text-align: center; border: 1px solid #0f0; padding: 40px; box-shadow: 0 0 20px #0f0; }
+        input { background: #000; color: #0f0; border: 1px solid #0f0; padding: 10px; width: 300px; outline: none; }
+        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="bar">
-        <input type="text" id="url" placeholder="google.com/search?q=test">
-        <button onclick="go()">Go</button>
+    <div class="container">
+        <h1>GATEWAY SYSTEM</h1>
+        <p>ENTER DESTINATION URL</p>
+        <input type="text" id="target" placeholder="example.com">
+        <button onclick="launch()">CONNECT</button>
     </div>
-    <iframe id="view"></iframe>
 
     <script>
-        function go(window.location.href = window.location.origin + "/proxy/" + target;) {
-            let target = document.getElementById('url').value.replace(/^https?:\/\//, '');
-            if (!target) return;
-            // VercelのRewrites機能を使って、自分のドメイン経由でサイトを呼び出す
-            document.getElementById('view').src = window.location.origin + "/proxy/" + target;
+        function launch() {
+            let val = document.getElementById('target').value;
+            if (!val) return;
+            // httpを消して整形
+            val = val.replace(/^https?:\/\//, '');
+            // 自分のドメインの /proxy/ 以下のパスに飛ばす
+            window.location.href = window.location.origin + "/proxy/" + val;
         }
-        document.getElementById('url').onkeypress = (e) => { if(e.key === 'Enter') go(); };
+        document.getElementById('target').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
     </script>
 </body>
 </html>
