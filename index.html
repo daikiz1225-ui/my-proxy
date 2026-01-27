@@ -18,7 +18,7 @@
     <iframe id="view"></iframe>
 
     <script>
-        function go() {
+        function go(window.location.href = window.location.origin + "/proxy/" + target;) {
             let target = document.getElementById('url').value.replace(/^https?:\/\//, '');
             if (!target) return;
             // VercelのRewrites機能を使って、自分のドメイン経由でサイトを呼び出す
