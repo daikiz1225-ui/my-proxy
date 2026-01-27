@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Academic Research Portal</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #nav { position: fixed; top: 0; width: 100%; background: rgba(30,30,30,0.8); padding: 5px; z-index: 9999; display: flex; gap: 10px; }
+        input { flex-grow: 1; background: #333; color: #fff; border: 1px solid #555; padding: 5px; }
+        iframe { width: 100vw; height: 100vh; border: none; }
+    </style>
+</head>
+<body>
+
+    <div id="nav">
+        <input type="text" id="urlInput" placeholder="URLを入力してEnter (例: google.com)">
+        <button onclick="loadPage()">Go</button>
+    </div>
+
+    <iframe id="mainFrame" src="https://www.google.com/search?igu=1"></iframe>
+
+    <script>
+        function loadPage() {
+            let url = document.getElementById('urlInput').value;
+            if (!url) return;
+            if (!url.startsWith('http')) url = 'https://' + url;
+
+            // Vercelで最も安定して動く、別の高速プロキシ中継サービスに切り替えたよ
+            const proxyEndpoint = "https://api.codetabs.com/v1/proxy?quest=";
+            
+            // 直接iframeのsrcを変えるのではなく、中身を読み込んで書き込む
+            fetch(proxyEndpoint + encodeURIComponent(url))
+                .then(res => res.text())
+                .then(data => {
+                    const frame = document.getElementById('mainFrame');
+                    const doc = frame.contentWindow.document;
+                    doc.open();
+                    doc.write(data);
+                    
+                    // ボタンや画像が動くようにベースURLを強制設定
+                    const base = doc.createElement('base');
+                    base.href = url;
+                    doc.head.appendChild(base);
+                    
+                    doc.close();
+                })
+                .catch(err => alert("アクセス失敗。学校の制限かサーバーの混雑です。"));
+        }
+
+        // Enterキーでも起動するように設定
+        document.getElementById('urlInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadPage();
+        });
+    </script>
+</body>
+</html>
