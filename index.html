@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Tool</title>
+</head>
+<body style="margin:0; overflow:hidden;">
+    <div id="content"></div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get('mode');
+        const target = params.get('url');
+
+        if (mode === 'proxy' && target) {
+            // Googleなどが代わりに取ってきた「コード」を、iframeの中に「ページ」として流し込む
+            fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`)
+                .then(response => response.text())
+                .then(html => {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.width = "100vw";
+                    iframe.style.height = "100vh";
+                    iframe.style.border = "none";
+                    document.body.appendChild(iframe);
+
+                    // iframeのドキュメントを無理やり書き換えて「ページ」として認識させる
+                    const doc = iframe.contentWindow.document;
+                    doc.open();
+                    doc.write(html);
+                    doc.close();
+
+                    // ページ内のリンクやボタンが動くようにベースURLを設定
+                    const base = doc.createElement('base');
+                    base.href = target;
+                    doc.head.appendChild(base);
+                })
+                .catch(err => {
+                    document.body.innerHTML = "エラーが発生しました: " + err;
+                });
+        } else if (mode === 'ace-game') {
+            document.body.innerHTML = "<h1>エース機・ソニッカー実装中...</h1>";
+        } else {
+            document.body.innerHTML = "<h1>Piped - 待機中</h1>";
+        }
+    </script>
+</body>
+</html>
