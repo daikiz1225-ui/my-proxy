@@ -3,86 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Safe Portal for iPad</title>
+    <title>Academic Portal</title>
     <style>
-        /* iPadの全画面にぴったりフィットさせる設定 */
-        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: fixed; width: 100%; }
-        
-        .nav { background: #333; padding: 12px; display: flex; gap: 8px; align-items: center; }
-        
-        /* 指でタップしやすいサイズに調整 */
-        input { flex: 1; padding: 12px; border: none; border-radius: 8px; background: #eee; font-size: 16px; -webkit-appearance: none; }
-        
-        button { 
-            padding: 12px 24px; 
-            background: #007bff; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 16px;
-            /* タップした時の反応を速くする */
-            touch-action: manipulation; 
-            -webkit-tap-highlight-color: transparent;
-        }
-        
-        button:active { background: #0056b3; transform: scale(0.98); }
-        
-        iframe { flex: 1; border: none; background: #fff; width: 100%; height: 100%; }
-        
-        #loading { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; display: none; z-index: 1000; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
+        iframe { width: 100%; height: 100%; border: none; }
+        .bar { position: fixed; bottom: 10px; right: 10px; opacity: 0.5; transition: 0.3s; }
+        .bar:hover { opacity: 1; }
+        button { padding: 10px; border-radius: 50%; border: none; background: #555; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <input type="text" id="targetUrl" placeholder="URLを貼り付け" inputmode="url">
-        <button id="goBtn">Go</button>
+    <iframe id="engine" src="https://physics-is-fun.vercel.app/"></iframe>
+
+    <div class="bar">
+        <button onclick="location.reload()">🔄</button>
     </div>
-    
-    <div id="loading">読み込み中... (i-FILTER回避中)</div>
-    <iframe id="displayFrame"></iframe>
-
-    <script>
-        const launch = async () => {
-            const input = document.getElementById('targetUrl');
-            const frame = document.getElementById('displayFrame');
-            const loader = document.getElementById('loading');
-            
-            let url = input.value.trim();
-            if (!url) return;
-            url = url.replace(/^https?:\/\//, '');
-            
-            loader.style.display = 'block';
-            input.blur(); // キーボードを閉じる
-
-            try {
-                const response = await fetch(`/proxy/${url}`);
-                const json = await response.json();
-                
-                const dataUrl = `data:${json.contentType};base64,${json.data}`;
-                const blobRes = await fetch(dataUrl);
-                const blob = await blobRes.blob();
-                
-                frame.src = URL.createObjectURL(blob);
-            } catch (e) {
-                alert("読み込みエラー。URLを確認してね！");
-            } finally {
-                loader.style.display = 'none';
-            }
-        };
-
-        // iPadの「タップ」に確実に反応させるイベント設定
-        const btn = document.getElementById('goBtn');
-        btn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            launch();
-        });
-        btn.addEventListener('click', launch);
-
-        document.getElementById('targetUrl').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') launch();
-        });
-    </script>
 </body>
 </html>
