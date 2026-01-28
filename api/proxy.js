@@ -7,21 +7,21 @@ export default async function handler(req, res) {
 
     try {
         const response = await fetch(targetUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15' }
         });
 
         const contentType = response.headers.get('content-type');
         res.setHeader('Content-Type', contentType || 'text/html');
         res.setHeader('Access-Control-Allow-Origin', '*');
 
-        if (contentType && contentType.includes('text')) {
+        if (contentType && (contentType.includes('text') || contentType.includes('javascript'))) {
             let text = await response.text();
             
-            // ★魔法の書き換えロジック★
-            // ページ内の /css/ や /img/ を、すべて自分のプロキシ経由(/proxy/https://...)に書き換える
+            // 住所書き換え：相対パスをすべて自分のVercel経由に強制変換
             const replaced = text
-                .replace(/(src|href)="\/(?!\/)/g, `$1="/proxy/${origin}/`)
-                .replace(/(src|href)="https?:\/\//g, (match) => `/proxy/${match.split('"')[1]}`);
+                .replace(/(src|href|action)="\/(?!\/)/g, `$1="/proxy/${origin}/`)
+                .replace(/url\(['"]?\/(?!\/)/g, `url("/proxy/${origin}/`) // CSSの中の画像も救出
+                .replace(/https?:\/\/(?!my-proxy-bice\.vercel\.app)/g, (match) => `/proxy/${match}`);
 
             res.send(replaced);
         } else {
