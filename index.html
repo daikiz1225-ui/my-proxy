@@ -2,32 +2,53 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Academic Research Portal</title>
+    <title>Academic Portal</title>
     <style>
-        body { background: #111; color: #0f0; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .container { text-align: center; border: 1px solid #0f0; padding: 40px; box-shadow: 0 0 20px #0f0; }
-        input { background: #000; color: #0f0; border: 1px solid #0f0; padding: 10px; width: 300px; outline: none; }
-        button { background: #0f0; color: #000; border: none; padding: 10px 20px; cursor: pointer; font-weight: bold; }
+        body { margin: 0; background: #1a1a1a; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #nav { background: #333; padding: 10px; display: flex; gap: 10px; z-index: 100; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        input { flex: 1; padding: 10px; border-radius: 5px; border: none; background: #eee; }
+        button { padding: 10px 20px; border-radius: 5px; border: none; background: #007bff; color: white; cursor: pointer; }
+        iframe { flex: 1; border: none; background: white; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>GATEWAY SYSTEM</h1>
-        <p>ENTER DESTINATION URL</p>
-        <input type="text" id="target" placeholder="example.com">
-        <button onclick="launch()">CONNECT</button>
+    <div id="nav">
+        <input type="text" id="urlInput" placeholder="google.com で検索やサイト入力...">
+        <button onclick="load()">Go</button>
     </div>
+    <iframe id="viewer"></iframe>
 
     <script>
-        function launch() {
-            let val = document.getElementById('target').value;
+        const viewer = document.getElementById('viewer');
+        const input = document.getElementById('urlInput');
+
+        function load() {
+            let val = input.value;
             if (!val) return;
-            // httpを消して整形
-            val = val.replace(/^https?:\/\//, '');
-            // 自分のドメインの /proxy/ 以下のパスに飛ばす
-            window.location.href = window.location.origin + "/proxy/" + val;
+            if (!val.includes('.') && !val.startsWith('http')) {
+                // ドットが含まれていなければGoogle検索とみなす
+                val = "www.google.com/search?q=" + encodeURIComponent(val);
+            } else if (!val.startsWith('http')) {
+                val = "https://" + val;
+            }
+            
+            // 自分のURLの /proxy/ 経由で読み込む
+            viewer.src = window.location.origin + "/proxy/" + val.replace(/^https?:\/\//, '');
         }
-        document.getElementById('target').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
+
+        input.onkeypress = (e) => { if(e.key === 'Enter') load(); };
+
+        // ★魔法のスクラプト：iframeの中のリンクをクリックしてもプロキシから外れないようにする
+        viewer.onload = function() {
+            try {
+                const doc = viewer.contentWindow.document;
+                const base = doc.createElement('base');
+                base.href = viewer.src; // リンクの基準をプロキシURLにする
+                doc.head.appendChild(base);
+            } catch (e) {
+                console.log("セキュリティ制限により直接の書き換えはスキップされました");
+            }
+        };
     </script>
 </body>
 </html>
