@@ -3,53 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Study Portal</title>
+    <title>Academic Study Notes</title>
     <style>
-        body { margin: 0; background: #000; display: flex; flex-direction: column; height: 100vh; }
-        .nav { background: #222; padding: 10px; display: flex; gap: 5px; }
-        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; }
-        button { padding: 12px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        iframe { flex: 1; border: none; background: #fff; }
+        body { margin: 0; background: #f0f0f0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        .bar { background: #fff; padding: 10px; display: flex; border-bottom: 1px solid #ccc; }
+        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; }
+        button { margin-left: 5px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        #viewer { flex: 1; border: none; background: #fff; }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <input type="text" id="u" placeholder="URLを貼る" inputmode="url">
+    <div class="bar">
+        <input type="text" id="u" placeholder="URLをここに（例: youtube.com）" inputmode="url">
         <button id="go">Go</button>
     </div>
-    <iframe id="f" name="f"></iframe>
+    <iframe id="viewer"></iframe>
 
     <script>
-        const f = document.getElementById('f');
-        const u = document.getElementById('u');
+        const go = async () => {
+            const u = document.getElementById('u');
+            const v = document.getElementById('viewer');
+            let target = u.value.trim();
+            if (!target) return;
+            if (!target.startsWith('http')) target = 'https://' + target;
 
-        const launch = () => {
-            let val = u.value.trim();
-            if(!val) return;
-            if(!val.startsWith('http')) val = 'https://' + val;
+            // 1. VercelのAPIを呼ぶ（URLを隠すためにBase64で送る）
+            const secureUrl = "/proxy/" + btoa(target);
             
-            // i-FILTERの目を盗むために、URLを少し加工して送る
-            f.src = "/proxy/" + encodeURI(val);
-            u.blur();
-        };
-
-        // iPadでの「Go」ボタンと「Enter」を死守
-        document.getElementById('go').addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
-        document.getElementById('go').addEventListener('click', launch);
-        u.addEventListener('keypress', (e) => { if(e.key === 'Enter') launch(); });
-
-        // iframeの中のリンクがクリックされた時、それもプロキシ経由にする魔法
-        f.onload = () => {
             try {
-                const doc = f.contentDocument || f.contentWindow.document;
-                const links = doc.getElementsByTagName('a');
-                for (let a of links) {
-                    if (a.href.startsWith('http')) {
-                        a.href = window.location.origin + "/proxy/" + a.href;
-                    }
-                }
-            } catch (e) { /* セキュリティ制限で触れない場合はスルー */ }
+                const res = await fetch(secureUrl);
+                const data = await res.json();
+                
+                // 2. 届いた「無意味なデータ」を、iPadの中でサイトに戻す
+                const html = atob(data.content);
+                const blob = new Blob([html], { type: 'text/html' });
+                v.src = URL.createObjectURL(blob);
+            } catch (e) {
+                alert("読み込みエラー。別のサイトを試してみて！");
+            }
         };
+
+        document.getElementById('go').onclick = go;
+        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') go(); };
     </script>
 </body>
 </html>
