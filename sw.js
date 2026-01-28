@@ -1,26 +1,19 @@
-const fetch = require('node-fetch');
+self.addEventListener('fetch', (event) => {
+    const url = event.request.url;
+    if (url.includes(location.host) || !url.startsWith('http')) return;
 
-export default async function handler(req, res) {
-    let { url } = req.query;
-    if (!url) return res.status(400).send("No URL");
+    const b64 = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_').replace(/\+/g, '-');
+    
+    // YouTubeの内部通信であることを証明するヘッダーを偽造して追加
+    const modifiedHeaders = new Headers(event.request.headers);
+    modifiedHeaders.set('X-YouTube-Client-Name', '1');
+    modifiedHeaders.set('X-YouTube-Client-Version', '2.20240126.00.00');
 
-    try {
-        const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        
-        const response = await fetch(decodedUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Accept-Language': 'ja-JP,ja;q=0.9',
-                'Referer': 'https://www.youtube.com/'
-            }
-        });
-
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'text/html');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        
-        const buffer = await response.buffer();
-        res.send(buffer);
-    } catch (e) {
-        res.status(200).send(`Error: ${e.message}`);
-    }
-}
+    event.respondWith(
+        fetch('/proxy/' + b64, {
+            method: event.request.method,
+            headers: modifiedHeaders,
+            credentials: 'include'
+        }).catch(() => fetch(event.request))
+    );
+});
