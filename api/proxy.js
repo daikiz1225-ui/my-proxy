@@ -18,23 +18,20 @@ export default async function handler(req, res) {
         if (contentType && contentType.includes('text/html')) {
             let body = await response.text();
             
-            // 1. ページ内の全リンクをBase64プロキシ経由に強制変換（i-FILTER対策）
-            // これにより「移動先でブロック」を回避する
-            const scriptInject = `
-            <script>
-                const proxyUrl = (url) => "/api/proxy?url=" + btoa(unescape(encodeURIComponent(url))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                document.addEventListener('click', e => {
-                    const a = e.target.closest('a');
-                    if (a && a.href && !a.href.includes(location.host)) {
-                        e.preventDefault();
-                        window.location.href = proxyUrl(a.href);
-                    }
-                }, true);
-            </script>`;
+            // 1. Pokiの404を防ぐためのベースURLタグを注入
+            body = body.replace('<head>', `<head><base href="${urlObj.origin}${urlObj.pathname}">`);
+
+            // 2. 広告とレイアウト崩れの原因になるスクリプトを無効化
+            body = body.replace(/google-analytics\.com|googletagservices\.com|googlesyndication\.com/g, 'example.com');
             
-            // 2. HTML内の相対パスを絶対パスに置換してリンク切れ（Pokiの404）を防ぐ
-            body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${urlObj.origin}/`);
-            body = body.replace('</head>', scriptInject + '</head>');
+            // 3. Game8の右側が黒くなるのを防ぐCSS注入
+            const customCSS = `
+            <style>
+                #right-column, .side-content, .ad-slot, iframe[id*="google_ads"] { display: none !important; }
+                #main-column, .main-content { width: 100% !important; margin: 0 !important; }
+                body { overflow-x: hidden !important; width: 100vw !important; }
+            </style>`;
+            body = body.replace('</head>', customCSS + '</head>');
 
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(body);
