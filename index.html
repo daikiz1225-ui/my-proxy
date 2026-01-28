@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Study Tool</title>
+    <title>Academic Portal</title>
     <style>
         body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         .nav { background: #333; padding: 12px; display: flex; gap: 8px; }
-        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; -webkit-appearance: none; }
+        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; }
         button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
         iframe { flex: 1; border: none; background: #fff; width: 100%; }
     </style>
@@ -20,6 +20,11 @@
     <iframe id="f"></iframe>
 
     <script>
+        // Service Workerの登録（門番を立たせる）
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+
         const u = document.getElementById('u');
         const b = document.getElementById('go');
         const f = document.getElementById('f');
@@ -28,22 +33,13 @@
             let val = u.value.trim();
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
-
-            // YouTubeの検索やサムネを動かすために、
-            // 「このiframeの中の通信は全部プロキシを通せ」という命令を飛ばす準備
             f.src = "/proxy/" + val;
             u.blur();
         };
 
-        // iPad用イベント
         b.addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
         b.addEventListener('click', launch);
         u.addEventListener('keypress', (e) => { if (e.key === 'Enter') launch(); });
-
-        // ★今回の肝：iframe内の通信を「監視・修正」する
-        window.addEventListener('message', function(e) {
-            // ここに将来的に、iframe内からのSOSを受け取る仕組みを作る
-        });
     </script>
 </body>
 </html>
