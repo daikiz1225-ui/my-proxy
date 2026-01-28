@@ -1,10 +1,13 @@
+// guard.js
 (function() {
-    const forceOnline = () => {
+    const ironCladOnline = () => {
         Object.defineProperty(navigator, 'onLine', { get: () => true, configurable: true });
         window.dispatchEvent(new Event('online'));
     };
-    // 0.05秒ごとに「オンラインだぞ」と念じ続ける
-    forceOnline();
-    setInterval(forceOnline, 50);
-    console.log("Guard Active: Offline blocked.");
+    ironCladOnline();
+    setInterval(ironCladOnline, 100); // 0.1秒ごとにオンラインを強制
+
+    // YouTube用の言語設定を焼き付ける
+    document.cookie = "PREF=hl=ja&gl=JP; domain=.youtube.com; path=/";
+    console.log("Specialist: Guard active.");
 })();
