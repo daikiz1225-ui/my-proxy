@@ -5,31 +5,27 @@ export default async function handler(req, res) {
     if (!url) return res.status(400).send("No URL");
 
     try {
-        // Base64デコード
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         
         const response = await fetch(decodedUrl, {
+            method: req.method,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Accept': '*/*'
+                'Accept': '*/*',
+                'Cookie': req.headers.cookie || '', // 足跡をYouTubeに渡す
+                'Referer': new URL(decodedUrl).origin
             },
-            timeout: 10000 // 10秒でタイムアウト
+            body: req.method !== 'GET' ? req.body : undefined
         });
 
-        const contentType = response.headers.get('content-type');
-        res.setHeader('Content-Type', contentType || 'text/html');
+        // YouTubeからの返事（ヘッダー）をそのままiPadに返す
+        res.setHeader('Content-Type', response.headers.get('content-type') || 'text/html');
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
 
         const buffer = await response.buffer();
         res.send(buffer);
     } catch (e) {
-        console.error(e);
-        res.status(200).send(`
-            <div style="color:red; padding:20px; font-family:sans-serif;">
-                <h3>通信エラー発生</h3>
-                <p>理由: ${e.message}</p>
-                <button onclick="location.reload()">再試行</button>
-            </div>
-        `);
+        res.status(200).send(`Error: ${e.message}`);
     }
 }
