@@ -1,26 +1,22 @@
-export default async function handler(req, res) {
-    const { url } = req.query;
-    if (!url) return res.status(400).send("No URL");
-
-    try {
-        const decodedUrl = decodeURIComponent(url);
-        const response = await fetch(decodedUrl, {
-            method: req.method,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Accept': '*/*',
-                'Referer': new URL(decodedUrl).origin,
-                'Cookie': req.headers.cookie || ''
-            }
+<script>
+    if ('serviceWorker' in navigator) {
+        // scopeを明確にして、確実に支配下に置く
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
+            reg.update(); // 常に最新の状態に更新
+            console.log('SW Ready');
         });
-
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'text/html');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-        const buffer = await response.arrayBuffer();
-        res.send(Buffer.from(buffer));
-    } catch (e) {
-        res.status(500).send("Error");
     }
-}
+
+    const launch = () => {
+        let val = document.getElementById('u').value.trim();
+        if (!val) return;
+        if (!val.startsWith('http')) val = 'https://' + val;
+        
+        // URLを「btoa」でエンコードして、特殊文字エラーを防ぐ
+        const encoded = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
+        document.getElementById('f').src = "/proxy/" + encoded;
+    };
+
+    document.getElementById('go').onclick = launch;
+    document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
+</script>
