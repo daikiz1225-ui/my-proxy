@@ -7,14 +7,14 @@
     <style>
         body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         .nav { background: #333; padding: 12px; display: flex; gap: 8px; }
-        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; background: #eee; }
-        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; -webkit-appearance: none; }
+        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; touch-action: manipulation; }
         iframe { flex: 1; border: none; background: #fff; width: 100%; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="URLをここに入力" inputmode="url">
+        <input type="text" id="u" placeholder="google.com" inputmode="url">
         <button id="go">Go</button>
     </div>
     <iframe id="f"></iframe>
@@ -27,19 +27,25 @@
         const launch = () => {
             let val = u.value.trim();
             if (!val) return;
+            if (!val.startsWith('http')) val = 'https://' + val;
 
-            // 1. https:// がなければ自動でつける
-            if (!val.startsWith('http')) {
-                val = 'https://' + val;
-            }
-
-            // 2. Vercelのプロキシを直撃（これが一番進展があった形）
             f.src = "/proxy/" + val;
-            u.blur();
+            u.blur(); // キーボードを閉じる
         };
 
-        b.onclick = launch;
-        u.onkeypress = (e) => { if(e.key === 'Enter') launch(); };
+        // iPad用：指が離れた瞬間に実行
+        b.addEventListener('touchend', (e) => {
+            e.preventDefault(); 
+            launch();
+        });
+
+        // PC/予備用
+        b.addEventListener('click', launch);
+
+        // キーボードのEnterキー
+        u.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') launch();
+        });
     </script>
 </body>
 </html>
