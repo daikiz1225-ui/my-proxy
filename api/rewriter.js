@@ -3,10 +3,10 @@ module.exports = {
         const urlObj = new URL(originalUrl);
         const origin = urlObj.origin;
 
-        // プロキシURLを作る関数を文字列として定義
         const proxyWrapScript = `
         <script>
             (function() {
+                // 1. URLをBase64プロキシ用に包む関数
                 const wrap = (url) => {
                     if(!url || url.startsWith('data:') || url.startsWith('javascript:') || url.includes(location.host)) return url;
                     try {
@@ -15,28 +15,35 @@ module.exports = {
                     } catch(e) { return url; }
                 };
 
-                // 1. ページ内の全Aタグを物理的に書き換え
-                document.querySelectorAll('a').forEach(a => {
-                    if(a.href) a.href = wrap(a.href);
-                });
-
-                // 2. フォーム送信も書き換え
-                document.querySelectorAll('form').forEach(f => {
-                    if(f.action) f.action = wrap(f.action);
-                });
-
-                // 3. 矢印ボタンが効かない対策（親からのメッセージを待機）
+                // 2. ページ内のリンクを全部改造 (Daikiさん作戦)
+                const updateLinks = () => {
+                    document.querySelectorAll('a').forEach(a => {
+                        if(a.href && !a.dataset.proxied) {
+                            a.href = wrap(a.href);
+                            a.dataset.proxied = "true";
+                        }
+                    });
+                };
+                
+                // 3. 親からの矢印命令を受け取る
                 window.addEventListener('message', e => {
                     if(e.data === 'back') history.back();
                     if(e.data === 'forward') history.forward();
                     if(e.data === 'reload') location.reload();
                 });
+
+                // 実行
+                updateLinks();
+                setInterval(updateLinks, 2000); // 動的に増えるリンクも監視
+
+                // 4. ページ自体のサイズ崩れを防ぐCSS注入
+                const style = document.createElement('style');
+                style.innerHTML = 'html, body { width: 100% !important; height: auto !important; min-height: 100vh !important; overflow-x: hidden !important; }';
+                document.head.appendChild(style);
             })();
         </script>`;
 
-        // 相対パスを絶対パスに置換（404対策）
         let body = html.replace(/(src|href)="\/(?!\/)/g, `$1="${origin}/`);
-        
         return body.replace('</head>', proxyWrapScript + '</head>');
     }
 };
