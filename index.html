@@ -5,37 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Academic Browser</title>
     <style>
-        body { margin: 0; background: #000; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .nav { background: #222; padding: 10px; display: flex; gap: 8px; }
-        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; background: #eee; }
-        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        iframe { flex: 1; border: none; background: #fff; width: 100%; height: 100%; }
+        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: fixed; width: 100%; }
+        .nav { background: #333; padding: 12px; display: flex; gap: 8px; box-sizing: border-box; }
+        input { 
+            flex: 1; padding: 12px; border: none; border-radius: 8px; 
+            font-size: 16px; background: #eee; -webkit-appearance: none; 
+        }
+        button { 
+            padding: 12px 24px; background: #28a745; color: white; 
+            border: none; border-radius: 8px; font-weight: bold; font-size: 16px;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        button:active { background: #218838; transform: scale(0.95); }
+        iframe { flex: 1; border: none; background: #fff; width: 100%; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="URLを貼り付け" inputmode="url">
-        <button id="go">Go</button>
+        <input type="text" id="targetUrl" placeholder="https://google.com" inputmode="url" autocomplete="off">
+        <button id="goBtn">Go</button>
     </div>
-    <iframe id="f"></iframe>
+    <iframe id="displayFrame"></iframe>
 
     <script>
+        const input = document.getElementById('targetUrl');
+        const btn = document.getElementById('goBtn');
+        const frame = document.getElementById('displayFrame');
+
         const launch = () => {
-            const input = document.getElementById('u');
-            const frame = document.getElementById('f');
             let val = input.value.trim();
             if (!val) return;
 
-            // i-FILTERをバグらせるためにURLをエンコード（暗号化に近い処理）
-            const encodedUrl = btoa(val); // Base64でURL自体を隠す
-            
-            // 自分のURLの後ろに、エンコードしたURLをくっつける
-            frame.src = `/proxy/${val}`; 
+            // URLの整形（httpがなければ補完）
+            if (!val.startsWith('http')) {
+                val = 'https://' + val;
+            }
+
+            // VercelのプロキシAPIへ飛ばす (vercel.jsonのrewrite設定を利用)
+            // /proxy/https://google.com のような形にする
+            frame.src = "/proxy/" + val;
+
+            // iPadのキーボードを閉じる
             input.blur();
         };
 
-        document.getElementById('go').onclick = launch;
-        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
+        // 1. Goボタンのクリック（PC用）
+        btn.addEventListener('click', (e) => {
+            launch();
+        });
+
+        // 2. Goボタンのタップ（iPad/iPhone用：反応を速くする）
+        btn.addEventListener('touchend', (e) => {
+            e.preventDefault(); // クリックイベントとの重複防止
+            launch();
+        });
+
+        // 3. Enterキー（iPadキーボードの「開く/確定」ボタン用）
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                launch();
+            }
+        });
     </script>
 </body>
 </html>
