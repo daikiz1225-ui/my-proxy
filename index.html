@@ -1,20 +1,37 @@
-<script>
-    document.getElementById('go').onclick = () => {
-        let val = document.getElementById('u').value.trim();
-        if (!val) return;
-        if (!val.startsWith('http')) val = 'https://' + val;
-        const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
-        
-        const f = document.getElementById('f');
-        f.src = "/proxy/" + b64;
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Academic Portal</title>
+    <style>
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; background: #333; color: white; }
+        button { padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        iframe { flex: 1; border: none; background: #fff; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <input type="text" id="u" placeholder="youtube.com">
+        <button id="go">閲覧開始</button>
+    </div>
+    <iframe id="f"></iframe>
 
-        // ★iframeが読み込まれる瞬間にguard.jsを無理やり流し込む
-        f.onload = () => {
-            try {
-                const script = f.contentWindow.document.createElement('script');
-                script.src = "/guard.js";
-                f.contentWindow.document.head.appendChild(script);
-            } catch(e) {}
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+
+        document.getElementById('go').onclick = () => {
+            let val = document.getElementById('u').value.trim();
+            if (!val) return;
+            if (!val.startsWith('http')) val = 'https://' + val;
+            
+            const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
+            // シンプルにsrcをセットするだけに。これが一番安定する。
+            document.getElementById('f').src = "/proxy/" + b64;
         };
-    };
-</script>
+    </script>
+</body>
+</html>
