@@ -1,3 +1,4 @@
 export default function handler(req, res) {
-    res.status(200).send("Ready to inject");
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ status: "Helper Active", mode: "Bypass" });
 }
