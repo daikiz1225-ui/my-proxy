@@ -2,19 +2,18 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Study Browser</title>
+    <title>Study Browser Pro</title>
     <style>
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
-        .nav { background: #222; padding: 10px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 12px; border-radius: 5px; border: none; }
-        button { padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        body { margin: 0; background: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+        .nav { background: #333; padding: 10px; display: flex; gap: 5px; }
+        input { flex: 1; padding: 12px; border-radius: 5px; border: none; font-size: 16px; }
+        button { padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
         iframe { flex: 1; border: none; background: #fff; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="youtube.com">
+        <input type="text" id="u" placeholder="URLを入力 (youtube.comなど)">
         <button id="go">Go</button>
     </div>
     <iframe id="f"></iframe>
@@ -23,14 +22,16 @@
             navigator.serviceWorker.register('/sw.js');
         }
 
-        document.getElementById('go').onclick = () => {
+        const launch = () => {
             let val = document.getElementById('u').value.trim();
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
-            // Base64変換
-            const b64 = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
+            const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
             document.getElementById('f').src = "/proxy/" + b64;
         };
+
+        document.getElementById('go').onclick = launch;
+        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
     </script>
 </body>
 </html>
