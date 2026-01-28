@@ -1,49 +1,22 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academic Browser v8</title>
-    <style>
-        /* 画面いっぱいに表示するための設定 */
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; display: flex; flex-direction: column; }
-        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 8px; align-items: center; border-bottom: 2px solid #333; flex-shrink: 0; }
-        .btn { background: #444; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 18px; }
-        .btn:hover { background: #555; }
-        input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #333; color: white; font-size: 16px; min-width: 0; }
-        #go { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; }
-        /* iframeを潰さないための設定 */
-        #f { flex-grow: 1; border: none; width: 100%; height: 100%; background: #fff; }
-    </style>
-</head>
-<body>
-    <div class="nav">
-        <button class="btn" onclick="document.getElementById('f').contentWindow.history.back()">←</button>
-        <button class="btn" onclick="document.getElementById('f').contentWindow.history.forward()">→</button>
-        <button class="btn" onclick="document.getElementById('f').contentWindow.location.reload()">↻</button>
-        <input type="text" id="u" placeholder="URLを入力 (例: game8.jp)">
-        <button id="go">Launch</button>
-    </div>
-    
-    <iframe id="f" name="f"></iframe>
+<div class="nav">
+    <button class="btn" onclick="sendToIframe('back')">←</button>
+    <button class="btn" onclick="sendToIframe('forward')">→</button>
+    <button class="btn" onclick="sendToIframe('reload')">↻</button>
+    <input type="text" id="u" placeholder="game8.jp">
+    <button id="go">Launch</button>
+</div>
 
-    <script src="/guard.js"></script>
-    <script src="/japanese.js"></script>
-    <script>
-        const f = document.getElementById('f');
-        const u = document.getElementById('u');
+<script>
+    const f = document.getElementById('f');
+    function sendToIframe(command) {
+        // iframeの中に命令を飛ばす
+        f.contentWindow.postMessage(command, '*');
+    }
 
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        }
-
-        document.getElementById('go').onclick = () => {
-            let val = u.value.trim();
-            if (!val) return;
-            if (!val.startsWith('http')) val = 'https://' + val;
-            const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
-            f.src = "/api/proxy?url=" + b64;
-        };
-    </script>
-</body>
-</html>
+    document.getElementById('go').onclick = () => {
+        let v = document.getElementById('u').value.trim();
+        if(!v.startsWith('http')) v = 'https://' + v;
+        const b64 = btoa(unescape(encodeURIComponent(v))).replace(/\//g, '_').replace(/\+/g, '-');
+        f.src = "/api/proxy?url=" + b64;
+    };
+</script>
