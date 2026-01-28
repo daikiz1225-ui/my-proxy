@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
     try {
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        const origin = new URL(decodedUrl).origin;
+        const urlObj = new URL(decodedUrl);
 
         const response = await fetch(decodedUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
@@ -18,21 +18,23 @@ export default async function handler(req, res) {
         if (contentType && contentType.includes('text/html')) {
             let body = await response.text();
             
-            // 1. 相対パス（/page）を絶対パス（https://site.com/page）に修正
-            body = body.replace(/(src|href|action)="\/(?!\/)/g, `$1="${origin}/`);
-            
-            // 2. さらにそれらをプロキシ経由（/api/proxy?url=Base64...）に誘導するスクリプトを注入
-            body = body.replace('<head>', `<head><script>
-                // ページ内のすべてのクリックを監視してプロキシ経由にする
-                window.onclick = e => {
+            // 1. ページ内の全リンクをBase64プロキシ経由に強制変換（i-FILTER対策）
+            // これにより「移動先でブロック」を回避する
+            const scriptInject = `
+            <script>
+                const proxyUrl = (url) => "/api/proxy?url=" + btoa(unescape(encodeURIComponent(url))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                document.addEventListener('click', e => {
                     const a = e.target.closest('a');
                     if (a && a.href && !a.href.includes(location.host)) {
                         e.preventDefault();
-                        const b64 = btoa(unescape(encodeURIComponent(a.href))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                        window.location.href = "/api/proxy?url=" + b64;
+                        window.location.href = proxyUrl(a.href);
                     }
-                };
-            </script>`);
+                }, true);
+            </script>`;
+            
+            // 2. HTML内の相対パスを絶対パスに置換してリンク切れ（Pokiの404）を防ぐ
+            body = body.replace(/(src|href)="\/(?!\/)/g, `$1="${urlObj.origin}/`);
+            body = body.replace('</head>', scriptInject + '</head>');
 
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(body);
@@ -42,6 +44,6 @@ export default async function handler(req, res) {
         res.setHeader('Content-Type', contentType);
         res.send(buffer);
     } catch (e) {
-        res.status(500).send(e.message);
+        res.status(500).send("Proxy Error: " + e.message);
     }
 }
