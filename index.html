@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Browser</title>
+    <title>Academic Study Tool</title>
     <style>
         body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         .nav { background: #333; padding: 12px; display: flex; gap: 8px; }
         input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; -webkit-appearance: none; }
-        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; touch-action: manipulation; }
+        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
         iframe { flex: 1; border: none; background: #fff; width: 100%; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="google.com" inputmode="url">
+        <input type="text" id="u" placeholder="youtube.com" inputmode="url">
         <button id="go">Go</button>
     </div>
     <iframe id="f"></iframe>
@@ -29,22 +29,20 @@
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
 
+            // YouTubeの検索やサムネを動かすために、
+            // 「このiframeの中の通信は全部プロキシを通せ」という命令を飛ばす準備
             f.src = "/proxy/" + val;
-            u.blur(); // キーボードを閉じる
+            u.blur();
         };
 
-        // iPad用：指が離れた瞬間に実行
-        b.addEventListener('touchend', (e) => {
-            e.preventDefault(); 
-            launch();
-        });
-
-        // PC/予備用
+        // iPad用イベント
+        b.addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
         b.addEventListener('click', launch);
+        u.addEventListener('keypress', (e) => { if (e.key === 'Enter') launch(); });
 
-        // キーボードのEnterキー
-        u.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') launch();
+        // ★今回の肝：iframe内の通信を「監視・修正」する
+        window.addEventListener('message', function(e) {
+            // ここに将来的に、iframe内からのSOSを受け取る仕組みを作る
         });
     </script>
 </body>
