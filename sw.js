@@ -1,18 +1,20 @@
 self.addEventListener('fetch', (event) => {
     const url = event.request.url;
-    if (url.includes(location.host) || !url.startsWith('http')) return;
 
-    // リンク移動、画像、API通信、すべてを個別のプロキシに振り分ける
+    // 自分のサーバー内のファイルや、既にBase64化されているものはスルー
+    if (url.includes(location.host + '/api/proxy') || url.includes('vercel.app')) return;
+    if (!url.startsWith('http')) return;
+
+    // すべての通信をBase64に包んで /api/proxy へ飛ばす
     const b64 = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_').replace(/\+/g, '-');
     
-    let proxyPath = '/api/proxy';
-    if (url.includes('youtube.com')) proxyPath = '/api/youtube';
-    if (url.includes('poki.com')) proxyPath = '/api/poki';
-
     event.respondWith(
-        fetch(`${proxyPath}?url=${b64}`, {
+        fetch(`/api/proxy?url=${b64}`, {
+            method: event.request.method,
             headers: event.request.headers,
             credentials: 'include'
         }).catch(() => fetch(event.request))
     );
 });
+
+self.addEventListener('activate', e => e.waitUntil(clients.claim()));
