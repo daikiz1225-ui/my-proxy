@@ -2,31 +2,49 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Portal v4</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Browser Pro</title>
     <style>
-        * { box-sizing: border-box; }
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        .nav { background: #222; padding: 10px; display: flex; gap: 10px; border-bottom: 2px solid #444; }
-        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; background: #333; color: white; }
-        button { padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        iframe { flex: 1; border: none; width: 100%; height: 100%; background: #fff; }
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-family: sans-serif; }
+        .nav { background: #222; padding: 8px; display: flex; gap: 8px; align-items: center; }
+        .btn { background: #444; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; }
+        .btn:active { background: #666; }
+        input { flex: 1; padding: 10px; border-radius: 5px; border: none; font-size: 14px; background: #333; color: white; }
+        #go { background: #28a745; color: white; border: none; padding: 8px 20px; border-radius: 5px; font-weight: bold; }
+        iframe { flex: 1; border: none; width: 100%; background: #fff; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="URLを入力 (例: google.com)">
-        <button id="go">閲覧開始</button>
+        <button class="btn" onclick="history_back()">←</button>
+        <button class="btn" onclick="history_forward()">→</button>
+        <button class="btn" onclick="refresh()">↻</button>
+        <input type="text" id="u" placeholder="URLを入力...">
+        <button id="go">Launch</button>
     </div>
-    <iframe id="f"></iframe>
+    <iframe id="f" name="f"></iframe>
+
     <script>
-        if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }
-        document.getElementById('go').onclick = () => {
-            let v = document.getElementById('u').value.trim();
-            if(!v) return;
-            if(!v.startsWith('http')) v = 'https://' + v;
-            document.getElementById('f').src = "/api/proxy?url=" + btoa(unescape(encodeURIComponent(v))).replace(/\//g, '_').replace(/\+/g, '-');
+        const f = document.getElementById('f');
+        const u = document.getElementById('u');
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        }
+
+        const getProxyUrl = (url) => {
+            if (!url.startsWith('http')) url = 'https://' + url;
+            const b64 = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_').replace(/\+/g, '-');
+            return "/api/proxy?url=" + b64;
         };
+
+        document.getElementById('go').onclick = () => {
+            if (u.value) f.src = getProxyUrl(u.value);
+        };
+
+        function history_back() { f.contentWindow.history.back(); }
+        function history_forward() { f.contentWindow.history.forward(); }
+        function refresh() { f.contentWindow.location.reload(); }
     </script>
 </body>
 </html>
