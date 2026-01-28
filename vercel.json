@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/api/headers", "destination": "/api/headers.js" },
     { "source": "/proxy/(.*)", "destination": "/api/proxy?url=$1" },
     { "source": "/sw.js", "destination": "/sw.js" },
     { "source": "/inject.js", "destination": "/inject.js" }
