@@ -1,33 +1,19 @@
 (function() {
-    // 禁じ手1：YouTubeの「オンライン・オフライン判定」を完全に破壊
-    Object.defineProperty(navigator, 'onLine', { get: () => true });
+    // 日本語環境を強制
+    Object.defineProperty(navigator, 'language', { get: () => 'ja-JP' });
+    Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja'] });
 
-    // 禁じ手2：通信の「根っこ（XMLHttpRequest）」を偽装
-    const originalXHR = window.XMLHttpRequest;
-    function newXHR() {
-        const xhr = new originalXHR();
-        const originalOpen = xhr.open;
-        xhr.open = function(method, url) {
-            if (typeof url === 'string' && url.startsWith('http') && !url.includes(location.host)) {
-                // 通信先をこっそりBase64プロキシに差し替える
-                const b64 = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_').replace(/\+/g, '-');
-                url = window.location.origin + '/proxy/' + b64;
-            }
-            return originalOpen.apply(this, arguments);
-        };
-        return xhr;
-    }
-    window.XMLHttpRequest = newXHR;
-
-    // 禁じ手3：Fetch APIも同様に乗っ取る
+    // 「無効な反応」の原因になる一部の追跡通信をブロックして、エラーを出させない
+    const blacklisted = ['/log_event', '/stats/', '/ptracking/'];
+    
     const originalFetch = window.fetch;
     window.fetch = function(input, init) {
-        if (typeof input === 'string' && input.startsWith('http') && !input.includes(location.host)) {
-            const b64 = btoa(unescape(encodeURIComponent(input))).replace(/\//g, '_').replace(/\+/g, '-');
-            input = window.location.origin + '/proxy/' + b64;
+        const url = typeof input === 'string' ? input : input.url;
+        if (blacklisted.some(path => url.includes(path))) {
+            return Promise.resolve(new Response('', { status: 204 }));
         }
-        return originalFetch(input, init);
+        return originalFetch.apply(this, arguments);
     };
 
-    console.log("YouTube Engine Hacked.");
+    console.log("Japanese Bypass Active");
 })();
