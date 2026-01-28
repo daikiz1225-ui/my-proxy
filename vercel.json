@@ -1,8 +1,7 @@
 {
+  "version": 2,
   "rewrites": [
     { "source": "/proxy/(.*)", "destination": "/api/proxy?url=$1" },
-    { "source": "/cookie/(.*)", "destination": "/api/cookie?url=$1" },
-    { "source": "/sw.js", "destination": "/sw.js" },
-    { "source": "/inject.js", "destination": "/inject.js" }
+    { "source": "/sw.js", "destination": "/sw.js" }
   ]
 }
