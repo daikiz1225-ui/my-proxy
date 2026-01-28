@@ -1,22 +1,46 @@
-<div class="nav">
-    <button class="btn" onclick="sendToIframe('back')">←</button>
-    <button class="btn" onclick="sendToIframe('forward')">→</button>
-    <button class="btn" onclick="sendToIframe('reload')">↻</button>
-    <input type="text" id="u" placeholder="game8.jp">
-    <button id="go">Launch</button>
-</div>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Academic Browser v9</title>
+    <style>
+        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; display: flex; flex-direction: column; }
+        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 8px; align-items: center; border-bottom: 2px solid #333; flex-shrink: 0; height: 60px; box-sizing: border-box; }
+        .btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 18px; }
+        input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #333; color: white; font-size: 16px; min-width: 0; }
+        #go { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; }
+        /* iframeを画面の残りのスペース100%に強制固定 */
+        #f { width: 100vw; flex-grow: 1; border: none; background: #fff; display: block; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <button class="btn" onclick="sendToIframe('back')">←</button>
+        <button class="btn" onclick="sendToIframe('forward')">→</button>
+        <button class="btn" onclick="sendToIframe('reload')">↻</button>
+        <input type="text" id="u" placeholder="game8.jp">
+        <button id="go">Launch</button>
+    </div>
+    <iframe id="f" name="f"></iframe>
 
-<script>
-    const f = document.getElementById('f');
-    function sendToIframe(command) {
-        // iframeの中に命令を飛ばす
-        f.contentWindow.postMessage(command, '*');
-    }
-
-    document.getElementById('go').onclick = () => {
-        let v = document.getElementById('u').value.trim();
-        if(!v.startsWith('http')) v = 'https://' + v;
-        const b64 = btoa(unescape(encodeURIComponent(v))).replace(/\//g, '_').replace(/\+/g, '-');
-        f.src = "/api/proxy?url=" + b64;
-    };
-</script>
+    <script src="/guard.js"></script>
+    <script src="/japanese.js"></script>
+    <script>
+        const f = document.getElementById('f');
+        function sendToIframe(command) {
+            f.contentWindow.postMessage(command, '*');
+        }
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        }
+        document.getElementById('go').onclick = () => {
+            let v = document.getElementById('u').value.trim();
+            if(!v) return;
+            if(!v.startsWith('http')) v = 'https://' + v;
+            const b64 = btoa(unescape(encodeURIComponent(v))).replace(/\//g, '_').replace(/\+/g, '-');
+            f.src = "/api/proxy?url=" + b64;
+        };
+    </script>
+</body>
+</html>
