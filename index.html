@@ -1,9 +1,46 @@
-<script>
-    // Service Workerを確実に登録・更新
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
-            reg.update(); // 常に最新の「検問」を適用
-        });
-    }
-    // ...あとのボタン処理などはそのまま...
-</script>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Academic Browser v5</title>
+    <style>
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 8px; border-bottom: 2px solid #333; }
+        .btn { background: #444; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #333; color: white; font-size: 16px; }
+        #go { background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; }
+        iframe { flex: 1; border: none; width: 100%; background: #fff; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <button class="btn" onclick="f.contentWindow.history.back()">←</button>
+        <button class="btn" onclick="f.contentWindow.history.forward()">→</button>
+        <button class="btn" onclick="f.contentWindow.location.reload()">↻</button>
+        <input type="text" id="u" placeholder="URLを入力 (例: youtube.com)">
+        <button id="go">Launch</button>
+    </div>
+    <iframe id="f" name="f"></iframe>
+
+    <script src="/guard.js"></script> <script>
+        const f = document.getElementById('f');
+        const u = document.getElementById('u');
+
+        // Service Worker (検問所) の起動
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        }
+
+        document.getElementById('go').onclick = () => {
+            let val = u.value.trim();
+            if (!val) return;
+            if (!val.startsWith('http')) val = 'https://' + val;
+            
+            // Base64化してプロキシ（運び屋）へ飛ばす
+            const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
+            f.src = "/api/proxy?url=" + b64;
+        };
+    </script>
+</body>
+</html>
