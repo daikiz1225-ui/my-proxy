@@ -3,55 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Browser</title>
+    <title>Academic Portal</title>
     <style>
         body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: fixed; width: 100%; }
         .nav { background: #333; padding: 12px; display: flex; gap: 8px; box-sizing: border-box; }
-        input { 
-            flex: 1; padding: 12px; border: none; border-radius: 8px; 
-            font-size: 16px; background: #eee; -webkit-appearance: none; 
-        }
-        button { 
-            padding: 12px 24px; background: #28a745; color: white; 
-            border: none; border-radius: 8px; font-weight: bold; font-size: 16px;
-            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
-        }
+        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; -webkit-appearance: none; }
+        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; touch-action: manipulation; }
         button:active { background: #218838; transform: scale(0.95); }
         iframe { flex: 1; border: none; background: #fff; width: 100%; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="targetUrl" placeholder="https://google.com" inputmode="url" autocomplete="off">
+        <input type="text" id="targetUrl" placeholder="https://youtube.com" inputmode="url">
         <button id="goBtn">Go</button>
     </div>
-    <iframe id="displayFrame"></iframe>
-
-    <script><iframe id="displayFrame"></iframe>
+    <iframe id="displayFrame" name="displayFrame"></iframe>
 
     <script>
-        // ★ここから下を貼り付ける★
+        // --- 通信ジャック機能（裏側の通信をすべてVercel経由に変える） ---
         (function() {
             const originalFetch = window.fetch;
             window.fetch = function(input, init) {
-                if (typeof input === 'string' && !input.includes(window.location.host) && input.startsWith('http')) {
+                if (typeof input === 'string' && input.startsWith('http') && !input.includes(window.location.host)) {
                     input = "/proxy/" + input;
                 }
                 return originalFetch(input, init);
             };
-
             const originalOpen = XMLHttpRequest.prototype.open;
             XMLHttpRequest.prototype.open = function(method, url) {
-                if (typeof url === 'string' && !url.includes(window.location.host) && url.startsWith('http')) {
+                if (typeof url === 'string' && url.startsWith('http') && !url.includes(window.location.host)) {
                     url = "/proxy/" + url;
                 }
                 return originalOpen.apply(this, arguments);
             };
         })();
-        // ★ここまで★
 
-        const input = document.getElementById('targetUrl');
-        // ...あとの launch() 関数などはそのまま残す
+        // --- 実行ボタンの処理 ---
         const input = document.getElementById('targetUrl');
         const btn = document.getElementById('goBtn');
         const frame = document.getElementById('displayFrame');
@@ -59,37 +47,16 @@
         const launch = () => {
             let val = input.value.trim();
             if (!val) return;
-
-            // URLの整形（httpがなければ補完）
-            if (!val.startsWith('http')) {
-                val = 'https://' + val;
-            }
-
-            // VercelのプロキシAPIへ飛ばす (vercel.jsonのrewrite設定を利用)
-            // /proxy/https://google.com のような形にする
+            if (!val.startsWith('http')) val = 'https://' + val;
+            
+            // プロキシ経由で表示
             frame.src = "/proxy/" + val;
-
-            // iPadのキーボードを閉じる
             input.blur();
         };
 
-        // 1. Goボタンのクリック（PC用）
-        btn.addEventListener('click', (e) => {
-            launch();
-        });
-
-        // 2. Goボタンのタップ（iPad/iPhone用：反応を速くする）
-        btn.addEventListener('touchend', (e) => {
-            e.preventDefault(); // クリックイベントとの重複防止
-            launch();
-        });
-
-        // 3. Enterキー（iPadキーボードの「開く/確定」ボタン用）
-        input.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                launch();
-            }
-        });
+        btn.addEventListener('click', launch);
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') launch(); });
     </script>
 </body>
 </html>
