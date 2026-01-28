@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/proxy/:url*",
-      "destination": "https://:url*"
-    }
+    { "source": "/proxy/(.*)", "destination": "/api/proxy?url=$1" }
   ]
 }
