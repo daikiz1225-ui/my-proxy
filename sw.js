@@ -1,8 +1,10 @@
 self.addEventListener('fetch', (event) => {
-    const url = event.request.url;
-    if (url.includes(location.host) || !url.startsWith('http')) return;
+    const url = new URL(event.request.url);
 
-    const b64 = btoa(unescape(encodeURIComponent(url))).replace(/\//g, '_').replace(/\+/g, '-');
+    // すでにプロキシを通っているものや内部ファイルは無視
+    if (url.pathname.includes('/api/proxy') || url.host.includes(location.host)) return;
+
+    // 通信をBase64に包む際、不完全なURLにならないよう調整
+    const b64 = btoa(unescape(encodeURIComponent(event.request.url))).replace(/\//g, '_').replace(/\+/g, '-');
     event.respondWith(fetch('/api/proxy?url=' + b64));
 });
-self.addEventListener('activate', e => e.waitUntil(clients.claim()));
