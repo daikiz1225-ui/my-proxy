@@ -5,58 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Academic Portal</title>
     <style>
-        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: fixed; width: 100%; }
-        .nav { background: #333; padding: 12px; display: flex; gap: 8px; box-sizing: border-box; }
-        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; -webkit-appearance: none; }
-        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; touch-action: manipulation; }
-        button:active { background: #218838; transform: scale(0.95); }
-        iframe { flex: 1; border: none; background: #fff; width: 100%; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; }
+        /* 画面いっぱいに表示 */
+        iframe { width: 100%; height: 100%; border: none; }
+        /* 隠しリロードボタン */
+        .refresh { position: fixed; bottom: 10px; right: 10px; width: 30px; height: 30px; background: rgba(255,255,255,0.2); border-radius: 50%; border: none; cursor: pointer; z-index: 100; }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <input type="text" id="targetUrl" placeholder="https://youtube.com" inputmode="url">
-        <button id="goBtn">Go</button>
-    </div>
-    <iframe id="displayFrame" name="displayFrame"></iframe>
+    <iframe src="https://physics-is-fun.vercel.app/" id="proxy-engine"></iframe>
 
-    <script>
-        // --- 通信ジャック機能（裏側の通信をすべてVercel経由に変える） ---
-        (function() {
-            const originalFetch = window.fetch;
-            window.fetch = function(input, init) {
-                if (typeof input === 'string' && input.startsWith('http') && !input.includes(window.location.host)) {
-                    input = "/proxy/" + input;
-                }
-                return originalFetch(input, init);
-            };
-            const originalOpen = XMLHttpRequest.prototype.open;
-            XMLHttpRequest.prototype.open = function(method, url) {
-                if (typeof url === 'string' && url.startsWith('http') && !url.includes(window.location.host)) {
-                    url = "/proxy/" + url;
-                }
-                return originalOpen.apply(this, arguments);
-            };
-        })();
-
-        // --- 実行ボタンの処理 ---
-        const input = document.getElementById('targetUrl');
-        const btn = document.getElementById('goBtn');
-        const frame = document.getElementById('displayFrame');
-
-        const launch = () => {
-            let val = input.value.trim();
-            if (!val) return;
-            if (!val.startsWith('http')) val = 'https://' + val;
-            
-            // プロキシ経由で表示
-            frame.src = "/proxy/" + val;
-            input.blur();
-        };
-
-        btn.addEventListener('click', launch);
-        btn.addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
-        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') launch(); });
-    </script>
+    <button class="refresh" onclick="location.reload()"></button>
 </body>
 </html>
