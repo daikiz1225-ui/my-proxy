@@ -6,26 +6,28 @@ export default async function handler(req, res) {
 
     try {
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        
+        const targetUrl = new URL(decodedUrl);
+
         const response = await fetch(decodedUrl, {
             method: req.method,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
                 'Accept': '*/*',
-                'Cookie': req.headers.cookie || '', // 足跡をYouTubeに渡す
-                'Referer': new URL(decodedUrl).origin
+                'Accept-Language': 'ja-JP,ja;q=0.9',
+                'Referer': targetUrl.origin,
+                'Origin': targetUrl.origin
             },
             body: req.method !== 'GET' ? req.body : undefined
         });
 
-        // YouTubeからの返事（ヘッダー）をそのままiPadに返す
+        // 全てのヘッダーを一度リセットしてから必要なものだけ通す
         res.setHeader('Content-Type', response.headers.get('content-type') || 'text/html');
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        
         const buffer = await response.buffer();
         res.send(buffer);
     } catch (e) {
-        res.status(200).send(`Error: ${e.message}`);
+        res.status(200).send(`Proxy Error: ${e.message}`);
     }
 }
