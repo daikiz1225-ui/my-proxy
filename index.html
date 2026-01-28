@@ -1,32 +1,53 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>My Study Browser</title>
+    <title>Academic Study Portal</title>
     <style>
-        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
-        .nav { background: #333; padding: 10px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 10px; border-radius: 5px; border: none; font-size: 16px; }
-        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 10px; z-index: 10; }
+        input { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 16px; background: #333; color: white; }
+        button { padding: 12px 20px; background: #c00; color: white; border: none; border-radius: 8px; font-weight: bold; }
         iframe { flex: 1; border: none; background: #fff; }
     </style>
 </head>
 <body>
     <div class="nav">
         <input type="text" id="u" placeholder="youtube.com">
-        <button id="go">Go</button>
+        <button id="go">Launch</button>
     </div>
-    <iframe id="f"></iframe>
+    <iframe id="f" name="f"></iframe>
+
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/sw.js');
         }
+
         document.getElementById('go').onclick = () => {
             let val = document.getElementById('u').value.trim();
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
+            
             const b64 = btoa(unescape(encodeURIComponent(val))).replace(/\//g, '_').replace(/\+/g, '-');
-            document.getElementById('f').src = "/proxy/" + b64;
+            const targetUrl = "/proxy/" + b64;
+            
+            const f = document.getElementById('f');
+            // ★ここが究極の先制攻撃：読み込む前に中身をジャックする
+            f.src = targetUrl;
+            
+            // 読み込みが始まった瞬間に何度も「オンラインだよ！」と叫び続ける
+            const hack = setInterval(() => {
+                try {
+                    const win = f.contentWindow;
+                    if (win) {
+                        Object.defineProperty(win.navigator, 'onLine', { get: () => true });
+                        win.document.cookie = "PREF=hl=ja&gl=JP; domain=.youtube.com; path=/";
+                    }
+                } catch(e) {}
+            }, 100);
+            
+            // 10秒後に停止
+            setTimeout(() => clearInterval(hack), 10000);
         };
     </script>
 </body>
