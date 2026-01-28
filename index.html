@@ -1,22 +1,36 @@
-<script>
-    if ('serviceWorker' in navigator) {
-        // scopeを明確にして、確実に支配下に置く
-        navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
-            reg.update(); // 常に最新の状態に更新
-            console.log('SW Ready');
-        });
-    }
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Study Browser</title>
+    <style>
+        body { margin: 0; background: #000; height: 100vh; display: flex; flex-direction: column; }
+        .nav { background: #222; padding: 10px; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border-radius: 5px; border: none; }
+        button { padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold; }
+        iframe { flex: 1; border: none; background: #fff; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <input type="text" id="u" placeholder="youtube.com">
+        <button id="go">Go</button>
+    </div>
+    <iframe id="f"></iframe>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
 
-    const launch = () => {
-        let val = document.getElementById('u').value.trim();
-        if (!val) return;
-        if (!val.startsWith('http')) val = 'https://' + val;
-        
-        // URLを「btoa」でエンコードして、特殊文字エラーを防ぐ
-        const encoded = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
-        document.getElementById('f').src = "/proxy/" + encoded;
-    };
-
-    document.getElementById('go').onclick = launch;
-    document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
-</script>
+        document.getElementById('go').onclick = () => {
+            let val = document.getElementById('u').value.trim();
+            if (!val) return;
+            if (!val.startsWith('http')) val = 'https://' + val;
+            // Base64変換
+            const b64 = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
+            document.getElementById('f').src = "/proxy/" + b64;
+        };
+    </script>
+</body>
+</html>
