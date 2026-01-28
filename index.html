@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Portal</title>
+    <title>Academic Study Notes</title>
     <style>
-        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .nav { background: #333; padding: 12px; display: flex; gap: 8px; }
-        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; background: #eee; }
-        button { padding: 12px 24px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        iframe { flex: 1; border: none; background: #fff; width: 100%; }
+        body { margin: 0; background: #000; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .nav { background: #333; padding: 10px; display: flex; gap: 8px; }
+        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; }
+        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        iframe { flex: 1; border: none; background: #fff; }
     </style>
 </head>
 <body>
@@ -20,26 +20,21 @@
     <iframe id="f"></iframe>
 
     <script>
-        // Service Workerの登録（門番を立たせる）
+        // Service Workerの強制登録
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js');
+            navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                .then(() => console.log('SW Registered'));
         }
 
-        const u = document.getElementById('u');
-        const b = document.getElementById('go');
-        const f = document.getElementById('f');
-
         const launch = () => {
-            let val = u.value.trim();
+            let val = document.getElementById('u').value.trim();
             if (!val) return;
             if (!val.startsWith('http')) val = 'https://' + val;
-            f.src = "/proxy/" + val;
-            u.blur();
+            document.getElementById('f').src = "/proxy/" + encodeURIComponent(val);
         };
 
-        b.addEventListener('touchend', (e) => { e.preventDefault(); launch(); });
-        b.addEventListener('click', launch);
-        u.addEventListener('keypress', (e) => { if (e.key === 'Enter') launch(); });
+        document.getElementById('go').onclick = launch;
+        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
     </script>
 </body>
 </html>
