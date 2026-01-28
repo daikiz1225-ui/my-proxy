@@ -1,33 +1,32 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Proxy</title>
+    <title>Safe Portal</title>
     <style>
-        body { margin: 0; background: #000; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        .nav { background: #222; padding: 5px; display: flex; gap: 5px; }
-        input { flex: 1; padding: 8px; border: none; border-radius: 4px; font-size: 14px; }
-        button { padding: 8px 15px; background: #444; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { margin: 0; background: #000; display: flex; flex-direction: column; height: 100vh; }
+        .nav { background: #222; padding: 10px; display: flex; }
+        input { flex: 1; padding: 10px; border: none; }
         iframe { flex: 1; border: none; background: #fff; }
     </style>
 </head>
 <body>
     <div class="nav">
-        <input type="text" id="u" placeholder="https://example.com (URLを直接貼る)">
-        <button onclick="go()">Go</button>
+        <input type="text" id="u" placeholder="URLを貼り付けてEnter">
     </div>
     <iframe id="f"></iframe>
 
     <script>
-        function go() {
-            let val = document.getElementById('u').value.trim();
-            if (!val) return;
-            // プロキシURLを生成してiframeに流し込む
-            const cleanUrl = val.replace(/^https?:\/\//, '');
-            document.getElementById('f').src = "/proxy/" + cleanUrl;
-        }
-        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') go(); };
+        document.getElementById('u').onkeypress = async (e) => {
+            if (e.key === 'Enter') {
+                const url = e.target.value.replace(/^https?:\/\//, '');
+                const res = await fetch(`/proxy/${url}`);
+                const json = await res.json();
+                
+                // 暗号化されたデータを元に戻して、iframeに流し込む
+                const blob = await (await fetch(`data:${json.contentType};base64,${json.data}`)).blob();
+                document.getElementById('f').src = URL.createObjectURL(blob);
+            }
+        };
     </script>
 </body>
 </html>
