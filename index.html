@@ -1,40 +1,22 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Study Notes</title>
-    <style>
-        body { margin: 0; background: #000; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        .nav { background: #333; padding: 10px; display: flex; gap: 8px; }
-        input { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 16px; }
-        button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        iframe { flex: 1; border: none; background: #fff; }
-    </style>
-</head>
-<body>
-    <div class="nav">
-        <input type="text" id="u" placeholder="youtube.com" inputmode="url">
-        <button id="go">Go</button>
-    </div>
-    <iframe id="f"></iframe>
+<script>
+    if ('serviceWorker' in navigator) {
+        // scopeを明確にして、確実に支配下に置く
+        navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(reg => {
+            reg.update(); // 常に最新の状態に更新
+            console.log('SW Ready');
+        });
+    }
 
-    <script>
-        // Service Workerの強制登録
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js', { scope: '/' })
-                .then(() => console.log('SW Registered'));
-        }
+    const launch = () => {
+        let val = document.getElementById('u').value.trim();
+        if (!val) return;
+        if (!val.startsWith('http')) val = 'https://' + val;
+        
+        // URLを「btoa」でエンコードして、特殊文字エラーを防ぐ
+        const encoded = btoa(val).replace(/\//g, '_').replace(/\+/g, '-');
+        document.getElementById('f').src = "/proxy/" + encoded;
+    };
 
-        const launch = () => {
-            let val = document.getElementById('u').value.trim();
-            if (!val) return;
-            if (!val.startsWith('http')) val = 'https://' + val;
-            document.getElementById('f').src = "/proxy/" + encodeURIComponent(val);
-        };
-
-        document.getElementById('go').onclick = launch;
-        document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
-    </script>
-</body>
-</html>
+    document.getElementById('go').onclick = launch;
+    document.getElementById('u').onkeypress = (e) => { if(e.key === 'Enter') launch(); };
+</script>
