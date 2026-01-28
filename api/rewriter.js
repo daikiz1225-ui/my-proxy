@@ -1,22 +1,37 @@
 module.exports = {
     rewrite: function(html, originalUrl) {
         const urlObj = new URL(originalUrl);
-        const origin = urlObj.origin;
+        
+        // 既存のHTML書き換えは最小限にして、バグを防ぐ
+        let body = html.replace(/(src|href)="\/(?!\/)/g, `$1="${urlObj.origin}/`);
 
-        // 1. 全てのURL（href, src）を「/api/proxy?url=Base64」形式に置換
-        // これで、クリックした瞬間にブラウザが「自分のサイト内の移動だ」と誤認する
-        let body = html.replace(/(href|src)="(https?:\/\/[^"]+)"/g, (match, p1, p2) => {
-            const b64 = Buffer.from(p2).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
-            return `${p1}="/api/proxy?url=${b64}"`;
-        });
+        // ★これが「飛ぶ瞬間に割り込む」専門のスクリプト
+        const interceptor = `
+        <script>
+            (function() {
+                const proxyWrap = (url) => {
+                    if (!url || url.includes(location.host) || url.startsWith('data:')) return url;
+                    return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(url))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                };
 
-        // 2. 相対パス（/css/style.cssなど）も絶対パスに直してからプロキシ化
-        body = body.replace(/(href|src)="\/(?!\/)([^"]+)"/g, (match, p1, p2) => {
-            const absolute = origin + '/' + p2;
-            const b64 = Buffer.from(absolute).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
-            return `${p1}="/api/proxy?url=${b64}"`;
-        });
+                // 1. Aタグのクリックを完全にジャックする
+                window.addEventListener('click', e => {
+                    const a = e.target.closest('a');
+                    if (a && a.href) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        window.location.href = proxyWrap(a.href);
+                    }
+                }, true);
 
-        return body;
+                // 2. JavaScriptによる画面遷移（location.href = ...）をジャックする
+                const originalDescriptor = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href');
+                Object.defineProperty(window.location, 'href', {
+                    set: (url) => { window.location.assign(proxyWrap(url)); }
+                });
+            })();
+        </script>`;
+
+        return body.replace('<head>', '<head>' + interceptor);
     }
 };
