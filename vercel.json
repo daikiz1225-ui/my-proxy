@@ -3,7 +3,7 @@
   "rewrites": [
     { "source": "/proxy/(.*)", "destination": "/api/proxy?url=$1" },
     { "source": "/sw.js", "destination": "/sw.js" },
-    { "source": "/inject.js", "destination": "/inject.js" },
-    { "source": "/api/status", "destination": "/api/status.js" }
+    { "source": "/api/clean", "destination": "/api/clean.js" },
+    { "source": "/youtubei/(.*)", "destination": "/api/clean" }
   ]
 }
