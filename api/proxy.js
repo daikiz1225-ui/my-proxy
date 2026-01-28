@@ -1,25 +1,31 @@
 export default async function handler(req, res) {
-  // URLを取得
   const { url } = req.query;
   if (!url) return res.status(400).send("URLを指定してください");
 
   const targetUrl = url.startsWith('http') ? url : 'https://' + url;
+  const targetOrigin = new URL(targetUrl).origin;
 
   try {
-    // Vercel標準のfetchを使用（node-fetch不要）
-    const response = await fetch(targetUrl);
-    const content = await response.text();
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+      }
+    });
+    let content = await response.text();
     
-    // 中身のURLを自分のプロキシ経由に書き換え
-    const root = new URL(targetUrl).origin;
-    const replaced = content
-      .replace(/src="\//g, `src="/proxy/${root}/`)
-      .replace(/href="\//g, `href="/proxy/${root}/`);
+    // 【強化版】URL書き換えロジック
+    // サイト内のあらゆるリンクを自分のVercel経由に強制変換する
+    content = content.replace(/(src|href|action)="\/(?!\/)/g, `$1="/proxy/${targetOrigin}/`);
+    
+    // YouTubeのスクリプトがエラーを吐かないように微調整
+    content = content.replace(/integrity="[^"]*"/g, ''); 
 
-    // ヘッダーを設定して画面を返す
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.status(200).send(replaced);
+    // セキュリティ制限（CSP）を無効化して表示を許可する
+    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval'; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';");
+    
+    res.status(200).send(content);
   } catch (e) {
-    res.status(500).send("エラーが発生しました: " + e.message);
+    res.status(500).send("エラー: " + e.message);
   }
 }
