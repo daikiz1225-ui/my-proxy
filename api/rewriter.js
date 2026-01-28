@@ -3,7 +3,7 @@ module.exports = {
         const urlObj = new URL(originalUrl);
         const origin = urlObj.origin;
 
-        const pokiHackScript = `
+        const pokiAdvancedScript = `
         <script>
             (function() {
                 const wrap = (url) => {
@@ -14,41 +14,39 @@ module.exports = {
                     } catch(e) { return url; }
                 };
 
-                // ★新機能：JavaScriptの通信をすべて横取り
-                const orgFetch = window.fetch;
-                window.fetch = function() {
-                    arguments[0] = wrap(arguments[0]);
-                    return orgFetch.apply(this, arguments);
-                };
-
-                const orgOpen = XMLHttpRequest.prototype.open;
-                XMLHttpRequest.prototype.open = function() {
-                    arguments[1] = wrap(arguments[1]);
-                    return orgOpen.apply(this, arguments);
-                };
-
-                // ★iframeの生成も監視してプロキシ化
-                const observer = new MutationObserver((mutations) => {
-                    mutations.forEach((mutation) => {
-                        mutation.addedNodes.forEach((node) => {
-                            if (node.tagName === 'IFRAME' && node.src && !node.src.includes(location.host)) {
-                                node.src = wrap(node.src);
-                            }
-                        });
+                // 1. 全てのURL、iframe、スクリプトの行き先をプロキシへ強制
+                const fastProxy = () => {
+                    document.querySelectorAll('a, iframe, embed, source').forEach(el => {
+                        const attr = el.tagName === 'A' ? 'href' : 'src';
+                        if (el[attr] && !el[attr].includes(location.host)) {
+                            el[attr] = wrap(el[attr]);
+                        }
                     });
+                };
+
+                // 2. JavaScriptの「窓」をハック (ここがPoki攻略の鍵)
+                const originalOpen = window.open;
+                window.open = function(url) { return originalOpen(wrap(url)); };
+                
+                // 3. 通信の心臓部をジャック
+                const { fetch: originalFetch } = window;
+                window.fetch = async (...args) => {
+                    args[0] = wrap(args[0]);
+                    return originalFetch(...args);
+                };
+
+                // 4. 親からの命令（矢印ボタン）
+                window.addEventListener('message', e => {
+                    if(e.data === 'back') history.back();
+                    if(e.data === 'forward') history.forward();
+                    if(e.data === 'reload') location.reload();
                 });
-                observer.observe(document.documentElement, { childList: true, subtree: true });
 
-                // 既存のリンク書き換え
-                setInterval(() => {
-                    document.querySelectorAll('a').forEach(a => {
-                        if(a.href && !a.href.includes(location.host)) a.href = wrap(a.href);
-                    });
-                }, 500);
+                setInterval(fastProxy, 300); // 爆速で書き換え
             })();
         </script>`;
 
         let body = html.replace(/(src|href)="\/(?!\/)/g, `$1="${origin}/`);
-        return body.replace('<head>', '<head>' + pokiHackScript);
+        return body.replace('<head>', '<head>' + pokiAdvancedScript);
     }
 };
