@@ -18,21 +18,43 @@ export default async function handler(req, res) {
         if (contentType && contentType.includes('text/html')) {
             let body = await response.text();
             
-            // 1. Pokiの404を防ぐためのベースURLタグを注入
+            // 1. 基本的なURLのズレを修正
             body = body.replace('<head>', `<head><base href="${urlObj.origin}${urlObj.pathname}">`);
 
-            // 2. 広告とレイアウト崩れの原因になるスクリプトを無効化
-            body = body.replace(/google-analytics\.com|googletagservices\.com|googlesyndication\.com/g, 'example.com');
-            
-            // 3. Game8の右側が黒くなるのを防ぐCSS注入
-            const customCSS = `
-            <style>
-                #right-column, .side-content, .ad-slot, iframe[id*="google_ads"] { display: none !important; }
-                #main-column, .main-content { width: 100% !important; margin: 0 !important; }
-                body { overflow-x: hidden !important; width: 100vw !important; }
-            </style>`;
-            body = body.replace('</head>', customCSS + '</head>');
+            // 2. ページ内のリンク・ボタン・フォーム送信をすべて横取りしてBase64化する最強スクリプト
+            const proxyScript = `
+            <script>
+                const encodeProxy = (url) => {
+                    if(!url || url.startsWith('data:') || url.startsWith('javascript:')) return url;
+                    try { 
+                        const absolute = new URL(url, document.baseURI).href;
+                        if (absolute.includes(location.host)) return url;
+                        return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(absolute))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                    } catch(e) { return url; }
+                };
 
+                // すべてのクリックを監視
+                document.addEventListener('click', e => {
+                    const el = e.target.closest('a, button, [onclick]');
+                    if (el && el.href && !el.href.includes(location.host)) {
+                        e.preventDefault();
+                        window.location.href = encodeProxy(el.href);
+                    }
+                }, true);
+
+                // フォーム送信も横取り
+                document.addEventListener('submit', e => {
+                    const form = e.target;
+                    if (form.action && !form.action.includes(location.host)) {
+                        e.preventDefault();
+                        const target = encodeProxy(form.action);
+                        const method = form.method.toUpperCase();
+                        window.location.href = target + (method === 'GET' ? '?' + new URLSearchParams(new FormData(form)).toString() : '');
+                    }
+                }, true);
+            </script>`;
+
+            body = body.replace('</head>', proxyScript + '</head>');
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.send(body);
         }
