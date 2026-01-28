@@ -1,37 +1,42 @@
 module.exports = {
     rewrite: function(html, originalUrl) {
         const urlObj = new URL(originalUrl);
-        
-        // 既存のHTML書き換えは最小限にして、バグを防ぐ
-        let body = html.replace(/(src|href)="\/(?!\/)/g, `$1="${urlObj.origin}/`);
+        const origin = urlObj.origin;
 
-        // ★これが「飛ぶ瞬間に割り込む」専門のスクリプト
-        const interceptor = `
+        // プロキシURLを作る関数を文字列として定義
+        const proxyWrapScript = `
         <script>
             (function() {
-                const proxyWrap = (url) => {
-                    if (!url || url.includes(location.host) || url.startsWith('data:')) return url;
-                    return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(url))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                const wrap = (url) => {
+                    if(!url || url.startsWith('data:') || url.startsWith('javascript:') || url.includes(location.host)) return url;
+                    try {
+                        const abs = new URL(url, "${origin}").href;
+                        return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                    } catch(e) { return url; }
                 };
 
-                // 1. Aタグのクリックを完全にジャックする
-                window.addEventListener('click', e => {
-                    const a = e.target.closest('a');
-                    if (a && a.href) {
-                        e.preventDefault();
-                        e.stopImmediatePropagation();
-                        window.location.href = proxyWrap(a.href);
-                    }
-                }, true);
+                // 1. ページ内の全Aタグを物理的に書き換え
+                document.querySelectorAll('a').forEach(a => {
+                    if(a.href) a.href = wrap(a.href);
+                });
 
-                // 2. JavaScriptによる画面遷移（location.href = ...）をジャックする
-                const originalDescriptor = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href');
-                Object.defineProperty(window.location, 'href', {
-                    set: (url) => { window.location.assign(proxyWrap(url)); }
+                // 2. フォーム送信も書き換え
+                document.querySelectorAll('form').forEach(f => {
+                    if(f.action) f.action = wrap(f.action);
+                });
+
+                // 3. 矢印ボタンが効かない対策（親からのメッセージを待機）
+                window.addEventListener('message', e => {
+                    if(e.data === 'back') history.back();
+                    if(e.data === 'forward') history.forward();
+                    if(e.data === 'reload') location.reload();
                 });
             })();
         </script>`;
 
-        return body.replace('<head>', '<head>' + interceptor);
+        // 相対パスを絶対パスに置換（404対策）
+        let body = html.replace(/(src|href)="\/(?!\/)/g, `$1="${origin}/`);
+        
+        return body.replace('</head>', proxyWrapScript + '</head>');
     }
 };
