@@ -4,6 +4,6 @@
     { "source": "/proxy/(.*)", "destination": "/api/proxy?url=$1" },
     { "source": "/sw.js", "destination": "/sw.js" },
     { "source": "/inject.js", "destination": "/inject.js" },
-    { "source": "/fix.js", "destination": "/fix.js" }
+    { "source": "/lang.js", "destination": "/lang.js" }
   ]
 }
