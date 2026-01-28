@@ -27,7 +27,31 @@
     </div>
     <iframe id="displayFrame"></iframe>
 
+    <script><iframe id="displayFrame"></iframe>
+
     <script>
+        // ★ここから下を貼り付ける★
+        (function() {
+            const originalFetch = window.fetch;
+            window.fetch = function(input, init) {
+                if (typeof input === 'string' && !input.includes(window.location.host) && input.startsWith('http')) {
+                    input = "/proxy/" + input;
+                }
+                return originalFetch(input, init);
+            };
+
+            const originalOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url) {
+                if (typeof url === 'string' && !url.includes(window.location.host) && url.startsWith('http')) {
+                    url = "/proxy/" + url;
+                }
+                return originalOpen.apply(this, arguments);
+            };
+        })();
+        // ★ここまで★
+
+        const input = document.getElementById('targetUrl');
+        // ...あとの launch() 関数などはそのまま残す
         const input = document.getElementById('targetUrl');
         const btn = document.getElementById('goBtn');
         const frame = document.getElementById('displayFrame');
