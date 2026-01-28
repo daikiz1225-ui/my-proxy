@@ -1,14 +1,10 @@
 self.addEventListener('fetch', (event) => {
     const url = event.request.url;
-    // 自分のドメインやプロキシ済みURLはそのまま
-    if (url.includes(location.host) || url.startsWith('data:')) return;
+    if (url.includes(location.host) || !url.startsWith('http')) return;
 
-    // 外への通信をすべてプロキシへ誘導
-    const proxyUrl = '/proxy/' + encodeURI(url);
+    // URLをBase64化して安全に運ぶ
+    const b64 = btoa(url).replace(/\//g, '_').replace(/\+/g, '-');
     event.respondWith(
-        fetch(proxyUrl, {
-            headers: event.request.headers,
-            mode: 'cors'
-        }).catch(() => fetch(event.request))
+        fetch('/proxy/' + b64, { headers: event.request.headers })
     );
 });
