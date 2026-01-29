@@ -21,7 +21,7 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // 1. 【サーバー側】画像URLを先回りして書き換え（読み込み高速化）
+            // 1. サーバー側での先行URL置換
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -33,33 +33,38 @@ export default async function handler(req, res) {
                 return match;
             });
 
-            // 2. 【ブラウザ側】オフライン解除 ＆ リンク修正
+            // 2. ブラウザ側：画面を消さずにオフラインを殺すスクリプト
             const inject = `
             <script>
                 (function() {
-                    // ★ ここが重要：オフラインの原因（Service Worker）を強制削除
+                    // Service Workerを消去（リロードなしで実行）
                     if ('serviceWorker' in navigator) {
-                        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                            for(let registration of registrations) {
-                                registration.unregister();
-                            }
+                        navigator.serviceWorker.getRegistrations().then(rs => {
+                            for(let r of rs) r.unregister();
                         });
                     }
 
-                    // YouTubeを「オンライン」だと騙す
+                    // 強制オンライン偽装
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
-                    const fakeOnline = () => {
+
+                    const recover = () => {
                         if (window.ytcfg) {
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
                         }
-                        // もしオフライン画面が出てたら消す
-                        const err = document.querySelector('#error-screen');
-                        if(err) err.style.display = 'none';
+                        
+                        // 【ここがポイント】オフライン画面が出ていたら、その要素だけを物理的に消し飛ばす
+                        const errorScreen = document.querySelector('#error-screen, ytm-error-renderer, .yt-mode-offline');
+                        if (errorScreen) {
+                            errorScreen.remove(); // 画面を消さずに、エラーだけ消す
+                            console.log('Offline screen removed');
+                        }
                     };
-                    setInterval(fakeOnline, 100);
 
-                    // リンク・画像をプロキシ経由に修正
+                    // 0.5秒ごとにエラー画面が出ていないか見張る
+                    setInterval(recover, 500);
+
+                    // リンク変換
                     const px = (u) => {
                         if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
                         try {
@@ -82,11 +87,13 @@ export default async function handler(req, res) {
                             }
                         });
                     };
-                    setInterval(fix, 1000); fix();
+                    setInterval(fix, 1000);
                 })();
             </script>
             <style>
-                #player-ads, .ad-slot { display: none !important; }
+                #player-ads, .ad-slot, #masthead-ad { display: none !important; }
+                /* オフライン表示自体をCSSで最初から無効化する */
+                ytm-error-renderer, #error-screen { visibility: hidden !important; pointer-events: none !important; }
             </style>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
