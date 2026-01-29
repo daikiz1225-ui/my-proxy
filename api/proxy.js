@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
     try {
         const { url } = req.query;
-        if (!url) return res.send("Proxy is Ready");
+        if (!url) return res.send("Proxy is Ready. Please input URL.");
 
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
@@ -15,13 +15,15 @@ export default async function handler(req, res) {
         });
 
         const contentType = response.headers.get('content-type') || '';
+        // セキュリティ制限（CSP）を解除して、僕らのスクリプトが自由に動けるようにする
+        res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Content-Type', contentType);
 
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // サーバー側で事前に置換
+            // サーバー側で事前に全てのURLをプロキシ化（爆速化の要）
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -36,58 +38,58 @@ export default async function handler(req, res) {
             const inject = `
             <script>
                 (function() {
-                    const PROXY_PATH = "/api/proxy?url=";
-                    const encodeUrl = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                    const PROXY = "/api/proxy?url=";
+                    const enc = (u) => btoa(unescape(encodeURIComponent(new URL(u, "${origin}").href))).replace(/\\//g, '_').replace(/\\+/g, '-');
 
-                    // 1. 通信の心臓部（fetchとXHR）をジャックする
-                    const originalFetch = window.fetch;
-                    window.fetch = function(input, init) {
-                        if (typeof input === 'string' && !input.includes(location.host) && input.startsWith('http')) {
-                            input = PROXY_PATH + encodeUrl(new URL(input, "${origin}").href);
-                        }
-                        return originalFetch(input, init);
-                    };
-
-                    const originalOpen = XMLHttpRequest.prototype.open;
-                    XMLHttpRequest.prototype.open = function(method, url) {
-                        if (typeof url === 'string' && !url.includes(location.host) && url.startsWith('http')) {
-                            url = PROXY_PATH + encodeUrl(new URL(url, "${origin}").href);
-                        }
-                        return originalOpen.apply(this, arguments);
-                    };
-
-                    // 2. オフライン記憶の抹殺
+                    // 1. Service Workerを徹底的に無効化（オフラインの元凶）
                     if ('serviceWorker' in navigator) {
-                        navigator.serviceWorker.getRegistrations().then(rs => { for(let r of rs) r.unregister(); });
+                        navigator.serviceWorker.register = () => new Promise(() => {}); // 登録させない
+                        navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
                     }
-                    Object.defineProperty(navigator, 'onLine', { get: () => true });
 
-                    // 3. YouTubeの内部フラグを常にオンラインへ
+                    // 2. 全ての通信（fetch/XHR）を強制プロキシ
+                    const wrap = (original) => function(input, init) {
+                        if (typeof input === 'string' && input.startsWith('http') && !input.includes(location.host)) {
+                            input = PROXY + enc(input);
+                        }
+                        return original.apply(this, [input, init]);
+                    };
+                    window.fetch = wrap(window.fetch);
+                    const open = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(m, url) {
+                        if (typeof url === 'string' && url.startsWith('http') && !url.includes(location.host)) {
+                            url = PROXY + enc(url);
+                        }
+                        return open.apply(this, arguments);
+                    };
+
+                    // 3. YouTubeのシステムを「常にオンライン」に固定
+                    Object.defineProperty(navigator, 'onLine', { get: () => true });
                     setInterval(() => {
                         if (window.ytcfg) {
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
                         }
-                        const err = document.querySelector('#error-screen, ytm-error-renderer');
+                        // オフライン画面を物理的に消去し続ける
+                        const err = document.querySelector('#error-screen, ytm-error-renderer, .yt-mode-offline');
                         if(err) err.remove();
-                    }, 500);
+                    }, 100);
 
-                    // 4. 動的要素の書き換え
-                    const fix = () => {
-                        document.querySelectorAll('a, img').forEach(el => {
-                            const attr = el.tagName === 'A' ? 'href' : 'src';
-                            if (el[attr] && !el[attr].includes(location.host) && !el.dataset.px) {
-                                el[attr] = PROXY_PATH + encodeUrl(new URL(el[attr], "${origin}").href);
+                    // 4. 動的なリンクと画像をリアルタイムで書き換え
+                    new MutationObserver(() => {
+                        document.querySelectorAll('a:not([data-px]), img:not([data-px])').forEach(el => {
+                            const a = el.tagName === 'A' ? 'href' : 'src';
+                            if (el[a] && el[a].startsWith('http') && !el[a].includes(location.host)) {
+                                el[a] = PROXY + enc(el[a]);
                                 el.dataset.px = '1';
                             }
                         });
-                    };
-                    setInterval(fix, 1000);
+                    }).observe(document.documentElement, { childList: true, subtree: true });
                 })();
             </script>
             <style>
-                #player-ads, .ad-slot, ytm-promoted-video-renderer { display: none !important; }
-                #error-screen { display: none !important; }
+                #player-ads, .ad-slot, #masthead-ad, ytm-promoted-video-renderer { display: none !important; }
+                #error-screen { display: none !important; visibility: hidden !important; }
             </style>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
@@ -97,6 +99,6 @@ export default async function handler(req, res) {
         return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        return res.status(500).send("🚨 Error: " + e.message);
+        return res.status(500).send("🚨 Fatal Error: " + e.message);
     }
 }
