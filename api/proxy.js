@@ -3,11 +3,9 @@ export default async function handler(req, res) {
         const { url } = req.query;
         if (!url) return res.send("Proxy is Online");
 
-        // URLデコード
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
 
-        // ターゲット取得
         const response = await fetch(decodedUrl, {
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
@@ -23,7 +21,7 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // 1. 【サーバー側】画像URLの先行書き換え（爆速化）
+            // 1. サーバー側書き換え
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -35,27 +33,37 @@ export default async function handler(req, res) {
                 return match;
             });
 
-            // 2. 【ブラウザ側】オフライン回避 ＆ 動的リンク変換
+            // 2. ブラウザ側：Service Worker殺し ＆ オフライン偽装
             const inject = `
             <script>
                 (function() {
-                    // --- オフライン絶対出さない設定 ---
+                    // 【重要】Service Worker（オフラインの元凶）を抹殺
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                            for(let registration of registrations) {
+                                registration.unregister();
+                                console.log('Service Worker Unregistered');
+                            }
+                        });
+                    }
+
+                    // オンライン偽装
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
                     const fakeOnline = () => {
                         if (window.ytcfg) {
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
-                            if (window.ytcfg.data_) {
-                                window.ytcfg.data_.CONNECTED = true;
-                                window.ytcfg.data_.OFFLINE_MODE = false;
-                            }
+                            window.ytcfg.set('INNERTUBE_CONTEXT', {'client': {'hl': 'ja', 'gl': 'JP'}}); // 地域設定も強制
                         }
-                        document.documentElement.classList.remove('yt-mode-offline');
-                        document.body.classList.remove('offline');
+                        // オフライン表示のDOMを物理削除
+                        const offlineMsg = document.querySelector('yt-formatted-string#message');
+                        if(offlineMsg && offlineMsg.innerText.includes('オフライン')) {
+                            offlineMsg.closest('#error-screen').remove();
+                        }
                     };
                     setInterval(fakeOnline, 100);
 
-                    // --- プロキシURL変換機能 ---
+                    // プロキシURL変換
                     const px = (u) => {
                         if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
                         try {
@@ -64,7 +72,6 @@ export default async function handler(req, res) {
                         } catch(e) { return u; }
                     };
 
-                    // リンク・画像・フォームの自動書き換え
                     const fix = () => {
                         document.querySelectorAll('img:not([data-px]), a:not([data-px]), form:not([data-px])').forEach(el => {
                             if (el.tagName === 'A') el.href = px(el.href);
@@ -84,13 +91,13 @@ export default async function handler(req, res) {
             </script>
             <style>
                 #player-ads, .ad-slot, #masthead-ad { display: none !important; }
-                .ytp-error-screen { background: none !important; } /* エラー画面を隠す */
+                /* オフライン画面をCSSでも隠す */
+                .yt-upsell-dialog-renderer, #error-screen { display: none !important; }
             </style>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
         }
 
-        // HTML以外（画像、スクリプト等）はそのまま返す
         const arrayBuffer = await response.arrayBuffer();
         return res.send(Buffer.from(arrayBuffer));
 
