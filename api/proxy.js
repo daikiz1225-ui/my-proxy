@@ -3,11 +3,9 @@ export default async function handler(req, res) {
         const { url } = req.query;
         if (!url) return res.send("Proxy is Online");
 
-        // URLデコード
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
 
-        // ターゲット取得
         const response = await fetch(decodedUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)' }
         });
@@ -18,41 +16,39 @@ export default async function handler(req, res) {
 
         if (contentType.includes('text/html')) {
             let html = await response.text();
-            
-            // 【ここに全機能を凝縮】YouTube偽装 + 画像速攻表示 + 検索ブロック回避
+
+            // --- [サーバー側での爆速書き換え処理] ---
+            // 1. 画像URLを正規表現で一括置換（ブラウザに届く前にプロキシ化）
+            html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
+                if (val.startsWith('http') || val.startsWith('//')) {
+                    const abs = val.startsWith('//') ? 'https:' + val : val;
+                    if (!abs.includes(req.headers.host)) {
+                        const encoded = Buffer.from(abs).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
+                        return `${attr}="/api/proxy?url=${encoded}"`;
+                    }
+                }
+                return match;
+            });
+
+            // 2. ブラウザ側で動く補助スクリプト（動的読み込み用）
             const inject = `
             <script>
                 (function() {
-                    // 1. YouTubeを騙す
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
-                    setInterval(() => { if(window.ytcfg) window.ytcfg.set('CONNECTED', true); }, 500);
-
-                    // 2. プロキシURL変換関数
                     const px = (u) => {
                         if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
-                        const abs = new URL(u, "${origin}").href;
-                        return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                        return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(new URL(u, "${origin}").href))).replace(/\\//g, '_').replace(/\\+/g, '-');
                     };
-
-                    // 3. 画像とリンクとフォームを全自動書き換え（爆速化）
-                    const fix = () => {
-                        document.querySelectorAll('img, a, form').forEach(el => {
-                            if (el.tagName === 'A' && el.href && !el.dataset.px) { el.href = px(el.href); el.dataset.px = '1'; }
-                            if (el.tagName === 'IMG' && el.src && !el.dataset.px) { el.src = px(el.src); el.dataset.px = '1'; }
-                            if (el.tagName === 'FORM' && !el.dataset.px) {
-                                el.addEventListener('submit', (e) => {
-                                    e.preventDefault();
-                                    const fd = new URLSearchParams(new FormData(el)).toString();
-                                    window.location.href = px(el.action + (el.action.includes('?') ? '&' : '?') + fd);
-                                });
-                                el.dataset.px = '1';
-                            }
+                    // 後から出てきた要素だけ対応
+                    setInterval(() => {
+                        document.querySelectorAll('img:not([data-px]), a:not([data-px])').forEach(el => {
+                            if(el.src) el.src = px(el.src);
+                            if(el.href) el.href = px(el.href);
+                            el.dataset.px = '1';
                         });
-                    };
-                    setInterval(fix, 1000); fix();
+                    }, 2000);
                 })();
-            </script>
-            <style>#player-ads, .ad-slot, #masthead-ad { display: none !important; }</style>`;
+            </script>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
         }
@@ -61,6 +57,6 @@ export default async function handler(req, res) {
         return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        return res.status(500).send("🚨 Error: " + e.message);
+        return res.status(500).send("Error: " + e.message);
     }
 }
