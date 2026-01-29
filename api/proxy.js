@@ -1,56 +1,44 @@
-export default async function handler(req, res) {
-    const { url } = req.query;
-    if (!url) return res.status(200).send("Proxy is Alive!");
-
-    try {
-        const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        
-        const response = await fetch(decodedUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)',
-                'Referer': 'https://www.youtube.com/'
-            }
-        });
-
-        const contentType = response.headers.get('content-type') || '';
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', contentType);
-
-        // HTMLの場合だけ、中身を書き換える（ここで全部やる）
-        if (contentType.includes('text/html')) {
-            let html = await response.text();
-            const origin = new URL(decodedUrl).origin;
-
-            // YouTube偽装 ＆ リンク変換 ＆ 広告消し を一気に注入
-            const script = `
-            <script>
-                Object.defineProperty(navigator, 'onLine', { get: () => true });
-                setInterval(() => {
-                    if (window.ytcfg) {
-                        window.ytcfg.set('CONNECTED', true);
-                        window.ytcfg.set('OFFLINE_MODE', false);
-                    }
-                }, 500);
-                document.querySelectorAll('a').forEach(a => {
-                    if(a.href && !a.href.includes(location.host)) {
-                        try {
-                            const abs = new URL(a.href, "${origin}").href;
-                            a.href = "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                        } catch(e) {}
-                    }
-                });
-            </script>
-            <style>#player-ads, .ad-slot, #masthead-ad { display: none !important; }</style>`;
-
-            html = html.replace('<head>', '<head>' + script);
-            return res.send(html);
+<script>
+    // 1. YouTubeをオンラインだと騙し続ける（基本）
+    Object.defineProperty(navigator, 'onLine', { get: () => true });
+    setInterval(() => {
+        if (window.ytcfg) {
+            window.ytcfg.set('CONNECTED', true);
+            window.ytcfg.set('OFFLINE_MODE', false);
         }
+    }, 500);
 
-        const arrayBuffer = await response.arrayBuffer();
-        return res.send(Buffer.from(arrayBuffer));
+    // 2. リンクの「書き換え」を徹底する
+    const proxyUrl = (originalUrl) => {
+        if (!originalUrl || originalUrl.startsWith('javascript:') || originalUrl.includes(location.host)) return originalUrl;
+        try {
+            // 相対パスを絶対パスに変換
+            const absoluteUrl = new URL(originalUrl, window.location.href).href;
+            // Base64でエンコードしてプロキシURLを作る
+            const encoded = btoa(unescape(encodeURIComponent(absoluteUrl))).replace(/\//g, '_').replace(/\+/g, '-');
+            return "/api/proxy?url=" + encoded;
+        } catch (e) { return originalUrl; }
+    };
 
-    } catch (e) {
-        // ここでエラー内容をブラウザに出し切る！
-        return res.status(500).send("Debug Error: " + e.message);
-    }
-}
+    // 画面内のすべてのクリックを監視して、外に逃げようとしたらプロキシに引き戻す
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest('a');
+        if (a && a.href) {
+            const newHref = proxyUrl(a.href);
+            if (newHref !== a.href) {
+                e.preventDefault(); // 元の移動をキャンセル
+                window.location.href = newHref; // プロキシ経由で移動
+            }
+        }
+    }, true);
+
+    // フォーム送信（検索など）もプロキシ経由にする
+    document.addEventListener('submit', (e) => {
+        const form = e.target;
+        if (form.action && !form.action.includes(location.host)) {
+            e.preventDefault();
+            const newAction = proxyUrl(form.action);
+            window.location.href = newAction + (form.method === 'get' ? '?' + new URLSearchParams(new FormData(form)).toString() : '');
+        }
+    }, true);
+</script>
