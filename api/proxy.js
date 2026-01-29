@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
     try {
         const { url } = req.query;
-        if (!url) return res.send("Proxy is Online");
+        if (!url) return res.send("Proxy is Ready");
 
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // 1. サーバー側書き換え
+            // 1. 【サーバー側】画像URLを先回りして書き換え（読み込み高速化）
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -33,37 +33,33 @@ export default async function handler(req, res) {
                 return match;
             });
 
-            // 2. ブラウザ側：Service Worker殺し ＆ オフライン偽装
+            // 2. 【ブラウザ側】オフライン解除 ＆ リンク修正
             const inject = `
             <script>
                 (function() {
-                    // 【重要】Service Worker（オフラインの元凶）を抹殺
+                    // ★ ここが重要：オフラインの原因（Service Worker）を強制削除
                     if ('serviceWorker' in navigator) {
                         navigator.serviceWorker.getRegistrations().then(function(registrations) {
                             for(let registration of registrations) {
                                 registration.unregister();
-                                console.log('Service Worker Unregistered');
                             }
                         });
                     }
 
-                    // オンライン偽装
+                    // YouTubeを「オンライン」だと騙す
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
                     const fakeOnline = () => {
                         if (window.ytcfg) {
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
-                            window.ytcfg.set('INNERTUBE_CONTEXT', {'client': {'hl': 'ja', 'gl': 'JP'}}); // 地域設定も強制
                         }
-                        // オフライン表示のDOMを物理削除
-                        const offlineMsg = document.querySelector('yt-formatted-string#message');
-                        if(offlineMsg && offlineMsg.innerText.includes('オフライン')) {
-                            offlineMsg.closest('#error-screen').remove();
-                        }
+                        // もしオフライン画面が出てたら消す
+                        const err = document.querySelector('#error-screen');
+                        if(err) err.style.display = 'none';
                     };
                     setInterval(fakeOnline, 100);
 
-                    // プロキシURL変換
+                    // リンク・画像をプロキシ経由に修正
                     const px = (u) => {
                         if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
                         try {
@@ -73,26 +69,24 @@ export default async function handler(req, res) {
                     };
 
                     const fix = () => {
-                        document.querySelectorAll('img:not([data-px]), a:not([data-px]), form:not([data-px])').forEach(el => {
-                            if (el.tagName === 'A') el.href = px(el.href);
-                            if (el.tagName === 'IMG') el.src = px(el.src);
-                            if (el.tagName === 'FORM') {
-                                el.addEventListener('submit', (e) => {
+                        document.querySelectorAll('a, img, form').forEach(el => {
+                            if(el.tagName==='A' && el.href && !el.dataset.px) { el.href = px(el.href); el.dataset.px='1'; }
+                            if(el.tagName==='IMG' && el.src && !el.dataset.px) { el.src = px(el.src); el.dataset.px='1'; }
+                            if(el.tagName==='FORM' && !el.dataset.px) {
+                                el.addEventListener('submit', e => {
                                     e.preventDefault();
                                     const fd = new URLSearchParams(new FormData(el)).toString();
-                                    window.location.href = px(el.action + (el.action.includes('?') ? '&' : '?') + fd);
+                                    window.location.href = px(el.action + (el.action.includes('?')?'&':'?') + fd);
                                 });
+                                el.dataset.px='1';
                             }
-                            el.dataset.px = '1';
                         });
                     };
                     setInterval(fix, 1000); fix();
                 })();
             </script>
             <style>
-                #player-ads, .ad-slot, #masthead-ad { display: none !important; }
-                /* オフライン画面をCSSでも隠す */
-                .yt-upsell-dialog-renderer, #error-screen { display: none !important; }
+                #player-ads, .ad-slot { display: none !important; }
             </style>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
@@ -102,6 +96,6 @@ export default async function handler(req, res) {
         return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        return res.status(500).send("🚨 Error: " + e.message);
+        return res.status(500).send("Error: " + e.message);
     }
 }
