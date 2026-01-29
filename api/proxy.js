@@ -1,44 +1,26 @@
-<script>
-    // 1. YouTubeをオンラインだと騙し続ける（基本）
-    Object.defineProperty(navigator, 'onLine', { get: () => true });
-    setInterval(() => {
-        if (window.ytcfg) {
-            window.ytcfg.set('CONNECTED', true);
-            window.ytcfg.set('OFFLINE_MODE', false);
-        }
-    }, 500);
+import { rewriteHTML } from './rewriter.js';
 
-    // 2. リンクの「書き換え」を徹底する
-    const proxyUrl = (originalUrl) => {
-        if (!originalUrl || originalUrl.startsWith('javascript:') || originalUrl.includes(location.host)) return originalUrl;
-        try {
-            // 相対パスを絶対パスに変換
-            const absoluteUrl = new URL(originalUrl, window.location.href).href;
-            // Base64でエンコードしてプロキシURLを作る
-            const encoded = btoa(unescape(encodeURIComponent(absoluteUrl))).replace(/\//g, '_').replace(/\+/g, '-');
-            return "/api/proxy?url=" + encoded;
-        } catch (e) { return originalUrl; }
-    };
+export default async function handler(req, res) {
+    const { url } = req.query;
+    if (!url) return res.send("Proxy Ready");
 
-    // 画面内のすべてのクリックを監視して、外に逃げようとしたらプロキシに引き戻す
-    document.addEventListener('click', (e) => {
-        const a = e.target.closest('a');
-        if (a && a.href) {
-            const newHref = proxyUrl(a.href);
-            if (newHref !== a.href) {
-                e.preventDefault(); // 元の移動をキャンセル
-                window.location.href = newHref; // プロキシ経由で移動
-            }
-        }
-    }, true);
+    try {
+        const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
+        const response = await fetch(decodedUrl);
+        const contentType = response.headers.get('content-type') || '';
 
-    // フォーム送信（検索など）もプロキシ経由にする
-    document.addEventListener('submit', (e) => {
-        const form = e.target;
-        if (form.action && !form.action.includes(location.host)) {
-            e.preventDefault();
-            const newAction = proxyUrl(form.action);
-            window.location.href = newAction + (form.method === 'get' ? '?' + new URLSearchParams(new FormData(form)).toString() : '');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', contentType);
+
+        if (contentType.includes('text/html')) {
+            let html = await response.text();
+            // 職人にHTMLを渡して加工してもらう
+            return res.send(rewriteHTML(html, new URL(decodedUrl).origin));
         }
-    }, true);
-</script>
+
+        const arrayBuffer = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
+    } catch (e) {
+        return res.status(500).send("Proxy Error: " + e.message);
+    }
+}
