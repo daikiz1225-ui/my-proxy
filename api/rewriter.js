@@ -1,34 +1,26 @@
-export function rewriteHTML(html, decodedUrl) {
-    const origin = new URL(decodedUrl).origin;
+export function rewriteHTML(html, origin) {
     const injectScript = `
     <script>
-        (function() {
-            // 1. YouTubeを「オンライン」だと信じ込ませる
-            Object.defineProperty(navigator, 'onLine', { get: () => true });
-            const hackYT = () => {
-                if (window.ytcfg) {
-                    window.ytcfg.set('CONNECTED', true);
-                    window.ytcfg.set('OFFLINE_MODE', false);
-                }
-            };
-            setInterval(hackYT, 500);
+        // オンライン偽装
+        Object.defineProperty(navigator, 'onLine', { get: () => true });
+        setInterval(() => {
+            if (window.ytcfg) {
+                window.ytcfg.set('CONNECTED', true);
+                window.ytcfg.set('OFFLINE_MODE', false);
+            }
+        }, 500);
 
-            // 2. 全リンクをプロキシ経由に改造（Educationドメイン対策も込み）
-            const wrap = (u) => {
-                if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
-                try {
-                    const abs = new URL(u, "${origin}").href;
-                    return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                } catch(e) { return u; }
-            };
-            setInterval(() => {
-                document.querySelectorAll('a').forEach(a => {
-                    if(a.href && !a.dataset.px) { a.href = wrap(a.href); a.dataset.px = '1'; }
-                });
-            }, 1000);
-        })();
-    </script>`;
+        // 強制プロキシ移動（ブロック回避）
+        document.addEventListener('click', (e) => {
+            const a = e.target.closest('a');
+            if (a && a.href && !a.href.includes(location.host)) {
+                e.preventDefault();
+                const encoded = btoa(unescape(encodeURIComponent(new URL(a.href, location.href).href))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                window.location.href = "/api/proxy?url=" + encoded;
+            }
+        }, true);
+    </script>
+    <style>#player-ads, .ad-slot { display: none !important; }</style>`;
 
-    let modifiedHtml = html.replace(/(src|href)="\/(?!\/)/g, \`$1="\${origin}/\`);
-    return modifiedHtml.replace('<head>', '<head>' + injectScript);
+    return html.replace('<head>', '<head>' + injectScript);
 }
