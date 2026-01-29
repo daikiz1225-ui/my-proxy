@@ -21,7 +21,7 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // 1. サーバー側での先行URL置換
+            // サーバー側で事前に置換
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -33,57 +33,52 @@ export default async function handler(req, res) {
                 return match;
             });
 
-            // 2. ブラウザ側：画面を消さずにオフラインを殺すスクリプト
             const inject = `
             <script>
                 (function() {
-                    // Service Workerを消去（リロードなしで実行）
-                    if ('serviceWorker' in navigator) {
-                        navigator.serviceWorker.getRegistrations().then(rs => {
-                            for(let r of rs) r.unregister();
-                        });
-                    }
+                    const PROXY_PATH = "/api/proxy?url=";
+                    const encodeUrl = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\\//g, '_').replace(/\\+/g, '-');
 
-                    // 強制オンライン偽装
+                    // 1. 通信の心臓部（fetchとXHR）をジャックする
+                    const originalFetch = window.fetch;
+                    window.fetch = function(input, init) {
+                        if (typeof input === 'string' && !input.includes(location.host) && input.startsWith('http')) {
+                            input = PROXY_PATH + encodeUrl(new URL(input, "${origin}").href);
+                        }
+                        return originalFetch(input, init);
+                    };
+
+                    const originalOpen = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(method, url) {
+                        if (typeof url === 'string' && !url.includes(location.host) && url.startsWith('http')) {
+                            url = PROXY_PATH + encodeUrl(new URL(url, "${origin}").href);
+                        }
+                        return originalOpen.apply(this, arguments);
+                    };
+
+                    // 2. オフライン記憶の抹殺
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(rs => { for(let r of rs) r.unregister(); });
+                    }
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
 
-                    const recover = () => {
+                    // 3. YouTubeの内部フラグを常にオンラインへ
+                    setInterval(() => {
                         if (window.ytcfg) {
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
                         }
-                        
-                        // 【ここがポイント】オフライン画面が出ていたら、その要素だけを物理的に消し飛ばす
-                        const errorScreen = document.querySelector('#error-screen, ytm-error-renderer, .yt-mode-offline');
-                        if (errorScreen) {
-                            errorScreen.remove(); // 画面を消さずに、エラーだけ消す
-                            console.log('Offline screen removed');
-                        }
-                    };
+                        const err = document.querySelector('#error-screen, ytm-error-renderer');
+                        if(err) err.remove();
+                    }, 500);
 
-                    // 0.5秒ごとにエラー画面が出ていないか見張る
-                    setInterval(recover, 500);
-
-                    // リンク変換
-                    const px = (u) => {
-                        if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
-                        try {
-                            const abs = new URL(u, "${origin}").href;
-                            return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                        } catch(e) { return u; }
-                    };
-
+                    // 4. 動的要素の書き換え
                     const fix = () => {
-                        document.querySelectorAll('a, img, form').forEach(el => {
-                            if(el.tagName==='A' && el.href && !el.dataset.px) { el.href = px(el.href); el.dataset.px='1'; }
-                            if(el.tagName==='IMG' && el.src && !el.dataset.px) { el.src = px(el.src); el.dataset.px='1'; }
-                            if(el.tagName==='FORM' && !el.dataset.px) {
-                                el.addEventListener('submit', e => {
-                                    e.preventDefault();
-                                    const fd = new URLSearchParams(new FormData(el)).toString();
-                                    window.location.href = px(el.action + (el.action.includes('?')?'&':'?') + fd);
-                                });
-                                el.dataset.px='1';
+                        document.querySelectorAll('a, img').forEach(el => {
+                            const attr = el.tagName === 'A' ? 'href' : 'src';
+                            if (el[attr] && !el[attr].includes(location.host) && !el.dataset.px) {
+                                el[attr] = PROXY_PATH + encodeUrl(new URL(el[attr], "${origin}").href);
+                                el.dataset.px = '1';
                             }
                         });
                     };
@@ -91,9 +86,8 @@ export default async function handler(req, res) {
                 })();
             </script>
             <style>
-                #player-ads, .ad-slot, #masthead-ad { display: none !important; }
-                /* オフライン表示自体をCSSで最初から無効化する */
-                ytm-error-renderer, #error-screen { visibility: hidden !important; pointer-events: none !important; }
+                #player-ads, .ad-slot, ytm-promoted-video-renderer { display: none !important; }
+                #error-screen { display: none !important; }
             </style>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
@@ -103,6 +97,6 @@ export default async function handler(req, res) {
         return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        return res.status(500).send("Error: " + e.message);
+        return res.status(500).send("🚨 Error: " + e.message);
     }
 }
