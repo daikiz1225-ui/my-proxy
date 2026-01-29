@@ -1,28 +1,26 @@
 export default async function handler(req, res) {
     try {
         const { url } = req.query;
-        if (!url) return res.send("<h1>YouTube Proxy : Ready</h1>");
-
-        let decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-
-        // 【新機能】もし動画視聴ページなら、強制的に「埋め込みプレイヤー」のURLに書き換える
-        // これでライブ配信も「オフライン」判定を避けつつ再生できる
-        if (decodedUrl.includes('watch?v=')) {
-            const videoId = new URL(decodedUrl).searchParams.get('v');
-            decodedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1`;
-        } else if (!decodedUrl.includes('embed')) {
-            // 動画視聴以外は、より軽量なモバイル版をターゲットにする
-            decodedUrl = decodedUrl.replace('www.youtube.com', 'm.youtube.com');
+        // URLがない時は、入力用の簡易ページを出す
+        if (!url) {
+            return res.send('<html><body style="background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:sans-serif;">' +
+                '<h2>YouTube Proxy Ready</h2>' +
+                '<input id="u" type="text" placeholder="https://m.youtube.com" style="width:80%;padding:10px;border-radius:5px;">' +
+                '<button onclick="location.href=\'/api/proxy?url=\'+btoa(document.getElementById(\'u\').value).replace(/\\//g,\'_\').replace(/\\+/g,\'-\')" style="margin-top:10px;padding:10px 20px;">Go</button>' +
+                '</body></html>');
         }
 
+        const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
 
         const response = await fetch(decodedUrl, {
+            method: req.method,
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
                 'Referer': 'https://www.youtube.com/',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-            }
+                'Origin': 'https://www.youtube.com/'
+            },
+            body: req.method === 'POST' ? JSON.stringify(req.body) : undefined
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -31,9 +29,9 @@ export default async function handler(req, res) {
 
         if (contentType.includes('text/html')) {
             let html = await response.text();
-
-            // サーバー側でリンクと画像を書き換え
             const proxyBase = "/api/proxy?url=";
+
+            // 1. サーバー側でのURL一括置換（画像・リンク・スクリプト）
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -45,49 +43,50 @@ export default async function handler(req, res) {
                 return match;
             });
 
+            // 2. YouTubeの内部機能をジャックしてオフラインを封じる
             const inject = `
             <script>
                 (function() {
+                    // --- YouTubeの脳内（設定）を書き換える ---
+                    const fakeYtcfg = () => {
+                        if (window.ytcfg) {
+                            if (window.ytcfg.set) {
+                                window.ytcfg.set('CONNECTED', true);
+                                window.ytcfg.set('OFFLINE_MODE', false);
+                            }
+                            if (window.ytcfg.data_) {
+                                window.ytcfg.data_.CONNECTED = true;
+                                window.ytcfg.data_.OFFLINE_MODE = false;
+                            }
+                        }
+                    };
+                    // 読み込み直後と、定期的に実行
+                    fakeYtcfg();
+                    setInterval(fakeYtcfg, 50);
+
+                    // --- 通信の心臓部をプロキシに強制する ---
                     const P_URL = "/api/proxy?url=";
                     const enc = (u) => btoa(unescape(encodeURIComponent(new URL(u, "${origin}").href))).replace(/\\//g, '_').replace(/\\+/g, '-');
-
-                    // 通信ジャック（ライブのストリーミングを止めないための処理）
+                    
                     const orgFetch = window.fetch;
                     window.fetch = function(u, i) {
-                        if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) {
-                            u = P_URL + enc(u);
-                        }
+                        if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) u = P_URL + enc(u);
                         return orgFetch(u, i);
                     };
 
-                    // オフライン判定を力技で消す
-                    Object.defineProperty(navigator, 'onLine', { get: () => true });
-                    setInterval(() => {
-                        if (window.ytcfg) {
-                            window.ytcfg.set('CONNECTED', true);
-                            window.ytcfg.set('OFFLINE_MODE', false);
-                        }
-                        // もしエラー画面が出たら即消去
-                        const err = document.querySelector('#error-screen, .ytp-error');
-                        if(err) err.style.display = 'none';
-                    }, 500);
+                    const orgOpen = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(m, u) {
+                        if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) u = P_URL + enc(u);
+                        return orgOpen.apply(this, arguments);
+                    };
 
-                    // リンクをタップした時に「watch」ページならプロキシ経由で再読み込み
-                    document.addEventListener('click', e => {
-                        const a = e.target.closest('a');
-                        if (a && a.href && !a.href.includes(location.host)) {
-                            e.preventDefault();
-                            window.location.href = P_URL + enc(a.href);
-                        }
-                    }, true);
+                    // --- オフライン画面を物理的に抹殺 ---
+                    Object.defineProperty(navigator, 'onLine', { get: () => true });
+                    const style = document.createElement('style');
+                    style.innerHTML = '#error-screen, ytm-error-renderer, .ytp-error { display: none !important; visibility: hidden !important; }';
+                    document.head.appendChild(style);
                 })();
-            </script>
-            <style>
-                /* 埋め込みモードを全画面にするための調整 */
-                body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
-                iframe { border: none; width: 100vw; height: 100vh; }
-                .ad-slot, #masthead-ad { display: none !important; }
-            </style>`;
+            </script>`;
 
             return res.send(html.replace('<head>', '<head>' + inject));
         }
