@@ -2,45 +2,65 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Academic Browser v9</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daiki Search Proxy</title>
     <style>
-        html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; background: #000; overflow: hidden; display: flex; flex-direction: column; }
-        .nav { background: #1a1a1a; padding: 10px; display: flex; gap: 8px; align-items: center; border-bottom: 2px solid #333; flex-shrink: 0; height: 60px; box-sizing: border-box; }
-        .btn { background: #444; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 18px; }
-        input { flex: 1; padding: 10px; border-radius: 6px; border: none; background: #333; color: white; font-size: 16px; min-width: 0; }
-        #go { background: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 6px; font-weight: bold; }
-        /* iframeを画面の残りのスペース100%に強制固定 */
-        #f { width: 100vw; flex-grow: 1; border: none; background: #fff; display: block; }
+        body { background: #121212; color: white; font-family: 'Helvetica Neue', Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { width: 90%; max-width: 600px; text-align: center; }
+        .logo { font-size: 50px; font-weight: bold; margin-bottom: 30px; }
+        .logo span { color: #ff0000; }
+        
+        /* 検索窓のデザイン */
+        .search-area { position: relative; width: 100%; }
+        input[type="text"] { width: 100%; padding: 15px 25px; border-radius: 30px; border: 1px solid #444; background: #222; color: white; font-size: 18px; outline: none; box-sizing: border-box; }
+        input[type="text"]:focus { border-color: #ff0000; box-shadow: 0 0 10px rgba(255,0,0,0.3); }
+        
+        .buttons { margin-top: 25px; }
+        button { padding: 12px 24px; margin: 5px; border-radius: 5px; border: none; background: #303134; color: #e8eaed; font-size: 14px; cursor: pointer; }
+        button:hover { border: 1px solid #5f6368; }
+        
+        .hint { margin-top: 20px; font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
-    <div class="nav">
-        <button class="btn" onclick="sendToIframe('back')">←</button>
-        <button class="btn" onclick="sendToIframe('forward')">→</button>
-        <button class="btn" onclick="sendToIframe('reload')">↻</button>
-        <input type="text" id="u" placeholder="game8.jp">
-        <button id="go">Launch</button>
+    <div class="container">
+        <div class="logo">Daiki<span>Search</span></div>
+        <div class="search-area">
+            <input type="text" id="searchQuery" placeholder="Webを検索、またはURLを入力" onkeydown="if(event.key==='Enter') startSearch()">
+        </div>
+        <div class="buttons">
+            <button onclick="startSearch()">検索 (Proxy)</button>
+            <button onclick="openUrl()">URLを直接開く</button>
+        </div>
+        <p class="hint">検索結果のリンクは自動的にプロキシ経由で開かれます</p>
     </div>
-    <iframe id="f" name="f"></iframe>
 
-    <script src="/guard.js"></script>
-    <script src="/japanese.js"></script>
     <script>
-        const f = document.getElementById('f');
-        function sendToIframe(command) {
-            f.contentWindow.postMessage(command, '*');
+        // URLをBase64に変換してプロキシへ飛ばす関数
+        function goToProxy(targetUrl) {
+            const encoded = btoa(unescape(encodeURIComponent(targetUrl))).replace(/\//g, '_').replace(/\+/g, '-');
+            window.location.href = `/api/proxy?url=${encoded}`;
         }
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+        // 検索実行
+        function startSearch() {
+            const q = document.getElementById('searchQuery').value;
+            if(!q) return;
+            // 直接URLっぽい場合はそのまま開く
+            if(q.startsWith('http')) {
+                goToProxy(q);
+            } else {
+                // DuckDuckGoのHTML版（軽い＆ブロックされにくい）で検索
+                const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+                goToProxy(searchUrl);
+            }
         }
-        document.getElementById('go').onclick = () => {
-            let v = document.getElementById('u').value.trim();
-            if(!v) return;
-            if(!v.startsWith('http')) v = 'https://' + v;
-            const b64 = btoa(unescape(encodeURIComponent(v))).replace(/\//g, '_').replace(/\+/g, '-');
-            f.src = "/api/proxy?url=" + b64;
-        };
+
+        // URL入力用
+        function openUrl() {
+            const q = document.getElementById('searchQuery').value;
+            if(q) goToProxy(q.includes('.') && !q.includes(' ') ? (q.startsWith('http') ? q : 'https://' + q) : 'https://www.google.com/search?q=' + q);
+        }
     </script>
 </body>
 </html>
