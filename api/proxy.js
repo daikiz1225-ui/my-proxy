@@ -3,11 +3,17 @@ export default async function handler(req, res) {
         const { url } = req.query;
         if (!url) return res.send("Proxy is Online");
 
+        // URLデコード
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
 
+        // ターゲット取得
         const response = await fetch(decodedUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)' }
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
+                'Referer': 'https://www.youtube.com/',
+                'Origin': 'https://www.youtube.com/'
+            }
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -17,8 +23,7 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
 
-            // --- [サーバー側での爆速書き換え処理] ---
-            // 1. 画像URLを正規表現で一括置換（ブラウザに届く前にプロキシ化）
+            // 1. 【サーバー側】画像URLの先行書き換え（爆速化）
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
                 if (val.startsWith('http') || val.startsWith('//')) {
                     const abs = val.startsWith('//') ? 'https:' + val : val;
@@ -30,42 +35,36 @@ export default async function handler(req, res) {
                 return match;
             });
 
-            // 2. ブラウザ側で動く補助スクリプト（動的読み込み用
-        const inject = `
+            // 2. 【ブラウザ側】オフライン回避 ＆ 動的リンク変換
+            const inject = `
             <script>
                 (function() {
-                    // 1. ブラウザの基本機能を「常にオンライン」に固定
+                    // --- オフライン絶対出さない設定 ---
                     Object.defineProperty(navigator, 'onLine', { get: () => true });
-                    window.addEventListener('offline', (e) => e.stopImmediatePropagation(), true);
-                    window.addEventListener('online', (e) => e.stopImmediatePropagation(), true);
-
-                    // 2. YouTube専用のフラグを強制上書き
                     const fakeOnline = () => {
                         if (window.ytcfg) {
-                            // YouTubeの接続状態を「CONNECTED」に固定
                             window.ytcfg.set('CONNECTED', true);
                             window.ytcfg.set('OFFLINE_MODE', false);
-                            // 内部データ層も念のため書き換え
                             if (window.ytcfg.data_) {
                                 window.ytcfg.data_.CONNECTED = true;
                                 window.ytcfg.data_.OFFLINE_MODE = false;
                             }
                         }
-                        // ページ全体の「オフライン」クラスを強制削除
                         document.documentElement.classList.remove('yt-mode-offline');
                         document.body.classList.remove('offline');
                     };
-
-                    // 0.1秒ごとに監視して、YouTubeがオフラインに切り替えようとした瞬間に書き戻す
                     setInterval(fakeOnline, 100);
 
-                    // 3. プロキシURL変換（既存の機能も維持）
+                    // --- プロキシURL変換機能 ---
                     const px = (u) => {
                         if(!u || typeof u !== 'string' || u.includes(location.host) || u.startsWith('data:')) return u;
-                        const abs = new URL(u, "${origin}").href;
-                        return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                        try {
+                            const abs = new URL(u, "${origin}").href;
+                            return "/api/proxy?url=" + btoa(unescape(encodeURIComponent(abs))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                        } catch(e) { return u; }
                     };
 
+                    // リンク・画像・フォームの自動書き換え
                     const fix = () => {
                         document.querySelectorAll('img:not([data-px]), a:not([data-px]), form:not([data-px])').forEach(el => {
                             if (el.tagName === 'A') el.href = px(el.href);
@@ -80,6 +79,22 @@ export default async function handler(req, res) {
                             el.dataset.px = '1';
                         });
                     };
-                    setInterval(fix, 1000);
+                    setInterval(fix, 1000); fix();
                 })();
-            </script>`;
+            </script>
+            <style>
+                #player-ads, .ad-slot, #masthead-ad { display: none !important; }
+                .ytp-error-screen { background: none !important; } /* エラー画面を隠す */
+            </style>`;
+
+            return res.send(html.replace('<head>', '<head>' + inject));
+        }
+
+        // HTML以外（画像、スクリプト等）はそのまま返す
+        const arrayBuffer = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
+
+    } catch (e) {
+        return res.status(500).send("🚨 Error: " + e.message);
+    }
+}
