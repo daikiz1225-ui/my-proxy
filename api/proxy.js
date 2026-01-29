@@ -1,26 +1,53 @@
 export default async function handler(req, res) {
-    try {
-        const { url } = req.query;
-        // URLがない時は、入力用の簡易ページを出す
-        if (!url) {
-            return res.send('<html><body style="background:#000;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:sans-serif;">' +
-                '<h2>YouTube Proxy Ready</h2>' +
-                '<input id="u" type="text" placeholder="https://m.youtube.com" style="width:80%;padding:10px;border-radius:5px;">' +
-                '<button onclick="location.href=\'/api/proxy?url=\'+btoa(document.getElementById(\'u\').value).replace(/\\//g,\'_\').replace(/\\+/g,\'-\')" style="margin-top:10px;padding:10px 20px;">Go</button>' +
-                '</body></html>');
-        }
+    const { url, q } = req.query; // q は検索ワード用
 
+    // --- A. URLも検索ワードもない場合：ホーム画面を表示 ---
+    if (!url && !q) {
+        return res.send(`
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <title>Daiki Proxy Search</title>
+                <style>
+                    body { background: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                    .search-box { width: 90%; max-width: 600px; text-align: center; }
+                    input { width: 100%; padding: 15px; border-radius: 30px; border: none; font-size: 18px; outline: none; margin-bottom: 20px; background: #333; color: white; }
+                    button { padding: 10px 25px; border-radius: 20px; border: none; background: #ff0000; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+                    button:hover { background: #cc0000; transform: scale(1.05); }
+                    .logo { font-size: 40px; font-weight: bold; margin-bottom: 30px; letter-spacing: -1px; }
+                    .logo span { color: #ff0000; }
+                </style>
+            </head>
+            <body>
+                <div class="search-box">
+                    <div class="logo">Daiki<span>Proxy</span></div>
+                    <form action="/api/proxy" method="GET">
+                        <input type="text" name="q" placeholder="検索ワードを入力..." required>
+                        <br>
+                        <button type="submit">検索してプロキシで開く</button>
+                    </form>
+                </div>
+            </body>
+            </html>
+        `);
+    }
+
+    // --- B. 検索ワード(q)がある場合：DuckDuckGoの検索結果をプロキシで取得して表示 ---
+    if (q) {
+        // DuckDuckGoのHTML版を検索して、結果をリスト表示する
+        const searchUrl = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q);
+        const encodedSearch = Buffer.from(searchUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
+        // 自分自身をプロキシとしてリダイレクト
+        return res.redirect(\`/api/proxy?url=\${encodedSearch}\`);
+    }
+
+    // --- C. 実際のプロキシ処理（ここから下は前のコードとほぼ同じ） ---
+    try {
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
         const origin = new URL(decodedUrl).origin;
 
         const response = await fetch(decodedUrl, {
-            method: req.method,
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Referer': 'https://www.youtube.com/',
-                'Origin': 'https://www.youtube.com/'
-            },
-            body: req.method === 'POST' ? JSON.stringify(req.body) : undefined
+            headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -31,64 +58,19 @@ export default async function handler(req, res) {
             let html = await response.text();
             const proxyBase = "/api/proxy?url=";
 
-            // 1. サーバー側でのURL一括置換（画像・リンク・スクリプト）
+            // リンクをすべてプロキシ経由に書き換え（検索結果も自動でこれに引っかかる）
             html = html.replace(/(src|href|srcset)="([^"]+)"/g, (match, attr, val) => {
-                if (val.startsWith('http') || val.startsWith('//')) {
-                    const abs = val.startsWith('//') ? 'https:' + val : val;
-                    if (!abs.includes(req.headers.host)) {
+                if (val.startsWith('http') || val.startsWith('//') || val.startsWith('/')) {
+                    try {
+                        const abs = new URL(val, origin).href;
                         const enc = Buffer.from(abs).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
-                        return `${attr}="${proxyBase}${enc}"`;
-                    }
+                        return \`\${attr}="\${proxyBase}\${enc}"\`;
+                    } catch(e) { return match; }
                 }
                 return match;
             });
 
-            // 2. YouTubeの内部機能をジャックしてオフラインを封じる
-            const inject = `
-            <script>
-                (function() {
-                    // --- YouTubeの脳内（設定）を書き換える ---
-                    const fakeYtcfg = () => {
-                        if (window.ytcfg) {
-                            if (window.ytcfg.set) {
-                                window.ytcfg.set('CONNECTED', true);
-                                window.ytcfg.set('OFFLINE_MODE', false);
-                            }
-                            if (window.ytcfg.data_) {
-                                window.ytcfg.data_.CONNECTED = true;
-                                window.ytcfg.data_.OFFLINE_MODE = false;
-                            }
-                        }
-                    };
-                    // 読み込み直後と、定期的に実行
-                    fakeYtcfg();
-                    setInterval(fakeYtcfg, 50);
-
-                    // --- 通信の心臓部をプロキシに強制する ---
-                    const P_URL = "/api/proxy?url=";
-                    const enc = (u) => btoa(unescape(encodeURIComponent(new URL(u, "${origin}").href))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                    
-                    const orgFetch = window.fetch;
-                    window.fetch = function(u, i) {
-                        if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) u = P_URL + enc(u);
-                        return orgFetch(u, i);
-                    };
-
-                    const orgOpen = XMLHttpRequest.prototype.open;
-                    XMLHttpRequest.prototype.open = function(m, u) {
-                        if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) u = P_URL + enc(u);
-                        return orgOpen.apply(this, arguments);
-                    };
-
-                    // --- オフライン画面を物理的に抹殺 ---
-                    Object.defineProperty(navigator, 'onLine', { get: () => true });
-                    const style = document.createElement('style');
-                    style.innerHTML = '#error-screen, ytm-error-renderer, .ytp-error { display: none !important; visibility: hidden !important; }';
-                    document.head.appendChild(style);
-                })();
-            </script>`;
-
-            return res.send(html.replace('<head>', '<head>' + inject));
+            return res.send(html);
         }
 
         const arrayBuffer = await response.arrayBuffer();
