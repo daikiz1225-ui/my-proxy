@@ -17,23 +17,47 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
             
-            // ★だいきのアイデア：クリックされた瞬間、URLをプロキシ用に変換して飛ばす魔法のスクリプト
-            const clickStealer = `
+            // ★ここを強化：ページ内の全リンクを監視して強制改変するスクリプト
+            const ultimateStealer = `
             <script>
-            document.addEventListener('click', e => {
-                const a = e.target.closest('a');
-                if (a && a.href && !a.href.includes(location.host)) {
-                    e.preventDefault(); // 普通の移動をキャンセル
-                    const targetUrl = a.href;
-                    // URLをBase64化してプロキシへ再送
-                    const enc = btoa(unescape(encodeURIComponent(targetUrl))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                    window.location.href = "/api/proxy?url=" + enc;
+            (function() {
+                const P_URL = "/api/proxy?url=";
+                const encode = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\\//g, '_').replace(/\\+/g, '-');
+
+                function rewrite() {
+                    document.querySelectorAll('a').forEach(a => {
+                        // まだプロキシ化されていない外部リンクがあれば書き換える
+                        if (a.href && a.href.startsWith('http') && !a.href.includes(location.host)) {
+                            const original = a.href;
+                            a.href = P_URL + encode(original);
+                            // クリックイベントも念のため上書き
+                            a.onclick = (e) => {
+                                e.preventDefault();
+                                window.location.href = P_URL + encode(original);
+                            };
+                        }
+                    });
                 }
-            }, true);
+
+                // 1. ページ読み込み時に実行
+                rewrite();
+                // 2. 0.5秒おきに実行（後から出てくるリンク対策）
+                setInterval(rewrite, 500);
+
+                // フォーム送信もプロキシ経由にする
+                document.addEventListener('submit', e => {
+                    const form = e.target;
+                    if(form.action && !form.action.includes(location.host)) {
+                        e.preventDefault();
+                        const u = new URL(form.action);
+                        const params = new URLSearchParams(new FormData(form)).toString();
+                        window.location.href = P_URL + encode(u.origin + u.pathname + "?" + params);
+                    }
+                });
+            })();
             </script>`;
 
-            // HTMLの書き換えは一切せず、このスクリプトを先頭に差し込むだけ
-            return res.send(clickStealer + html);
+            return res.send(ultimateStealer + html);
         }
 
         const ab = await response.arrayBuffer();
