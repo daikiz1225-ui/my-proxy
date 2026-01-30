@@ -1,45 +1,44 @@
 export default async function handler(req, res) {
     const { url: q } = req.query;
-    if (!q) return res.send("Status: OK");
+    // URLがない場合はDuckDuckGo Liteへ（JavaScriptなしの検索結果）
+    const target = q ? Buffer.from(q.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString() 
+                     : "https://html.duckduckgo.com/html/";
 
     try {
-        const target = Buffer.from(q.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        
-        const response = await fetch(target, {
+        const r = await fetch(target, {
             headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
         });
 
-        // iPadに「これはダウンロードしちゃダメなやつだ」と100%分からせる設定
+        let ct = r.headers.get('content-type') || '';
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
         res.setHeader('Content-Disposition', 'inline');
-        res.setHeader('X-Frame-Options', 'ALLOWALL');
 
-        if (response.headers.get('content-type')?.includes('html')) {
-            let html = await response.text();
-            const origin = new URL(target).origin;
+        if (ct.includes('html')) {
+            let h = await r.text();
+            const b = "/api/proxy?url=";
 
-            // リンクの書き換えを「?url=」を使わない形に
-            html = html.replace(/(src|href)="([^"]+)"/ig, (m, a, v) => {
-                try {
-                    const f = new URL(v, origin).href;
-                    const e = Buffer.from(f).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
-                    return `${a}="/api/proxy?url=${e}"`;
-                } catch { return m; }
-            });
+            // ★ DuckDuckGoのリンクを全部プロキシ経由に書き換える
+            const s = `<script>
+                document.addEventListener('click', e => {
+                    const a = e.target.closest('a');
+                    if (a && a.href && !a.href.includes(location.host)) {
+                        e.preventDefault();
+                        // DuckDuckGoの転送用URLを飛ばして、直接サイトへ
+                        const u = new URL(a.href);
+                        let realUrl = u.searchParams.get('uddg') || a.href;
+                        const enc = btoa(unescape(encodeURIComponent(realUrl))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                        location.href = "${b}" + enc;
+                    }
+                }, true);
+            </script>`;
 
-            // ★ブラウザに「読み込み中」を維持させてダウンロードに逃げさせない工夫
-            const output = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
-            return res.status(200).send(output);
+            return res.send(s + h);
         }
 
-        // HTML以外はそのまま
-        const ab = await response.arrayBuffer();
-        res.setHeader('Content-Type', response.headers.get('content-type'));
+        const ab = await r.arrayBuffer();
+        res.setHeader('Content-Type', ct);
         return res.send(Buffer.from(ab));
-
     } catch (e) {
-        // エラーすらHTMLで返す
-        res.setHeader('Content-Type', 'text/html');
-        return res.send(`<b>Connection Error</b>`);
+        return res.send("Error");
     }
 }
