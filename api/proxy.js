@@ -9,21 +9,21 @@ export default async function handler(req, res) {
         const response = await fetch(decodedUrl, {
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Referer': origin
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
             }
         });
 
         const contentType = response.headers.get('content-type') || '';
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+        res.setHeader('Content-Disposition', 'inline');
 
+        // HTMLの場合の処理
         if (contentType.includes('text/html')) {
             let html = await response.text();
             const proxyBase = "/api/proxy?url=";
 
-            // HTML内のURLを書き換え
-            html = html.replace(/(src|href|srcset|action)="([^"]+)"/g, (match, attr, val) => {
+            // 1. URL書き換え（正規表現をより安全に）
+            html = html.replace(/(src|href|srcset|action)="([^"]+)"/ig, (match, attr, val) => {
                 try {
                     const fullUrl = new URL(val, origin).href;
                     const enc = Buffer.from(fullUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
@@ -31,44 +31,39 @@ export default async function handler(req, res) {
                 } catch(e) { return match; }
             });
 
-            // ★白い画面対策：JavaScriptの通信をすべて強制ジャックするスクリプトを注入
+            // 2. JavaScriptジャック（ホワイトアウト対策）
             const inject = `
             <script>
             (function() {
                 const P_URL = "/api/proxy?url=";
                 const encode = (u) => btoa(u).replace(/\\//g, '_').replace(/\\+/g, '-');
-
-                // 1. Fetchをジャック
                 const orgFetch = window.fetch;
                 window.fetch = function(u, i) {
-                    if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) {
-                        u = P_URL + encode(u);
-                    }
+                    if (typeof u === 'string' && u.startsWith('http')) u = P_URL + encode(u);
                     return orgFetch(u, i);
                 };
-
-                // 2. XMLHttpRequest(Ajax)をジャック
                 const orgOpen = XMLHttpRequest.prototype.open;
                 XMLHttpRequest.prototype.open = function(m, u) {
-                    if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) {
-                        u = P_URL + encode(u);
-                    }
+                    if (typeof u === 'string' && u.startsWith('http')) u = P_URL + encode(u);
                     return orgOpen.apply(this, arguments);
                 };
-
-                // 3. エラーで止まらないように見守る
-                window.onerror = function() { return true; };
             })();
             </script>`;
 
-            // <head> の直後に注入して、他のどのプログラムよりも先に動かす
-            return res.send(html.replace('<head>', '<head>' + inject));
+            // <head>があってもなくても、とにかく一番最初にスクリプトを突っ込む
+            html = inject + html;
+
+            res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+            return res.send(html);
         }
 
+        // HTML以外（画像、CSS、JS）はそのままの型で返す
+        res.setHeader('Content-Type', contentType);
         const arrayBuffer = await response.arrayBuffer();
         return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        return res.status(500).send("Error: " + e.message);
+        res.setHeader('Content-Type', 'text/html');
+        return res.status(500).send("Proxy Error: " + e.message);
     }
 }
