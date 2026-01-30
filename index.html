@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8"><title>Kick Search</title>
+    <meta charset="UTF-8">
+    <title>Kick Search</title>
     <style>
         body { background: #0a0a0a; color: #e0e0e0; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .container { width: 90%; max-width: 600px; text-align: center; }
         .logo { font-size: 60px; font-weight: 900; margin-bottom: 30px; font-style: italic; }
         .logo span { color: #00d4ff; }
-        input { width: 100%; padding: 18px; border-radius: 50px; border: 2px solid #333; background: #1a1a1a; color: white; font-size: 18px; outline: none; }
-        button { padding: 12px 30px; margin: 10px; border-radius: 50px; border: 1px solid #00d4ff; background: #222; color: #00d4ff; cursor: pointer; }
+        input { width: 100%; padding: 18px; border-radius: 50px; border: 2px solid #333; background: #1a1a1a; color: white; font-size: 18px; outline: none; box-sizing: border-box; }
+        button { padding: 12px 30px; margin: 20px; border-radius: 50px; border: 1px solid #00d4ff; background: #222; color: #00d4ff; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -21,7 +22,17 @@
         function start() {
             const val = document.getElementById('q').value;
             if(!val) return;
-            const target = val.startsWith('http') ? val : "https://www.bing.com/search?q=" + encodeURIComponent(val);
+            
+            let target;
+            if(val.startsWith('http')) {
+                target = val;
+            } else if (val.includes('.') && !val.includes(' ')) {
+                target = "https://" + val;
+            } else {
+                // Bingを最初からプロキシ経由で開く
+                target = "https://www.bing.com/search?q=" + encodeURIComponent(val);
+            }
+
             const enc = btoa(unescape(encodeURIComponent(target))).replace(/\//g, '_').replace(/\+/g, '-');
             window.location.href = "/api/proxy?url=" + enc;
         }
