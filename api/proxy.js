@@ -1,55 +1,55 @@
 export default async function handler(req, res) {
-    const k1 = 'ur'; const k2 = 'l'; // 'url' を分割して検閲回避
-    const q = req.query[k1 + k2];
-    if (!q) return res.send("System Online.");
+    const { url } = req.query;
+    if (!url) return res.send("System Active.");
 
     try {
-        // Base64デコードを自作関数で隠す
-        const d = (s) => Buffer.from(s.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
-        const target = d(q);
-        
-        const r = await fetch(target, {
+        const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
+        const response = await fetch(decodedUrl, {
             headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
         });
 
-        const ct = r.headers.get('content-type') || '';
-        res.setHeader('Content-Type', ct);
-        // ダウンロードを誘発させないためのダミーヘッダー
-        res.setHeader('Cache-Control', 'no-store');
+        const contentType = response.headers.get('content-type') || '';
+        
+        // ★最重要：HTMLなら、とにかく「これはWebページだぞ！」とブラウザに叩き込む
+        if (contentType.includes('html')) {
+            let html = await response.text();
+            const origin = new URL(decodedUrl).origin;
 
-        if (ct.includes('html')) {
-            let h = await r.text();
-            const b = "/api/proxy?" + k1 + k2 + "=";
-            const o = new URL(target).origin;
-
-            // フィルターが反応しそうな文字列を変換
-            h = h.replace(/(src|href)="([^"]+)"/ig, (m, a, v) => {
+            // リンクの書き換え（シンプルかつ確実な方法に戻す）
+            html = html.replace(/(src|href)="([^"]+)"/ig, (m, attr, val) => {
                 try {
-                    const f = new URL(v, o).href;
-                    const e = Buffer.from(f).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
-                    return a + '="' + b + e + '"';
+                    const fullUrl = new URL(val, origin).href;
+                    const enc = Buffer.from(fullUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
+                    return `${attr}="/api/proxy?url=${enc}"`;
                 } catch { return m; }
             });
 
-            // 実行用スクリプトを「文字列結合」で隠す
-            const s = '<scr' + 'ipt>' + 
-                      'document.addEventListener("cl" + "ick", e => {' +
-                      'const a = e.target.closest("a");' +
-                      'if (a && a.href && !a.href.includes(location.host)) {' +
-                      'e.preventDefault();' +
-                      'const target = a.href;' +
-                      'location.href = "' + b + '" + btoa(target).replace(/\\//g, "_").replace(/\\+/g, "-");' +
-                      '}' +
-                      '}, true);' +
-                      '</scr' + 'ipt>';
+            // iPadが「ファイルだ」と勘違いしないように、正しいHTMLの型を宣言する
+            res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+            res.setHeader('Content-Disposition', 'inline'); // 「保存」じゃなく「表示」しろという命令
+            res.setHeader('X-Content-Type-Options', 'nosniff'); // 「勝手にファイル判定するな」という命令
 
-            return res.send(s + h);
+            // 念のため、真っさらなHTMLの中に本物を流し込む
+            const finalHtml = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    ${html}
+</body>
+</html>`;
+
+            return res.send(finalHtml);
         }
 
-        const ab = await r.arrayBuffer();
+        // 画像などはそのまま
+        res.setHeader('Content-Type', contentType);
+        const ab = await response.arrayBuffer();
         return res.send(Buffer.from(ab));
 
     } catch (e) {
-        return res.send("Offline");
+        return res.status(500).send("Proxy Error");
     }
 }
