@@ -17,52 +17,44 @@ export default async function handler(req, res) {
         if (contentType.includes('text/html')) {
             let html = await response.text();
             
-            // ★ここを強化：ページ内の全リンクを監視して強制改変するスクリプト
-            const ultimateStealer = `
+            const pBase = "/api/proxy?url=";
+            const inject = `
             <script>
             (function() {
-                const P_URL = "/api/proxy?url=";
                 const encode = (u) => btoa(unescape(encodeURIComponent(u))).replace(/\\//g, '_').replace(/\\+/g, '-');
 
-                function rewrite() {
+                // リンクの書き換えとクリックの完全乗っ取り
+                function fixLinks() {
                     document.querySelectorAll('a').forEach(a => {
-                        // まだプロキシ化されていない外部リンクがあれば書き換える
                         if (a.href && a.href.startsWith('http') && !a.href.includes(location.host)) {
-                            const original = a.href;
-                            a.href = P_URL + encode(original);
-                            // クリックイベントも念のため上書き
-                            a.onclick = (e) => {
+                            const target = a.href;
+                            const proxyUrl = "${pBase}" + encode(target);
+                            
+                            // 1. hrefを書き換え（長押し対策）
+                            a.href = proxyUrl;
+                            
+                            // 2. クリックイベントを最優先で奪い取る（タップ対策）
+                            // Bingのスクリプトより先に動くように true（キャプチャ相）で実行
+                            a.addEventListener('click', function(e) {
                                 e.preventDefault();
-                                window.location.href = P_URL + encode(original);
-                            };
+                                e.stopImmediatePropagation(); // 他のスクリプト（Bing側）を止める
+                                window.location.href = proxyUrl;
+                                return false;
+                            }, true);
                         }
                     });
                 }
 
-                // 1. ページ読み込み時に実行
-                rewrite();
-                // 2. 0.5秒おきに実行（後から出てくるリンク対策）
-                setInterval(rewrite, 500);
-
-                // フォーム送信もプロキシ経由にする
-                document.addEventListener('submit', e => {
-                    const form = e.target;
-                    if(form.action && !form.action.includes(location.host)) {
-                        e.preventDefault();
-                        const u = new URL(form.action);
-                        const params = new URLSearchParams(new FormData(form)).toString();
-                        window.location.href = P_URL + encode(u.origin + u.pathname + "?" + params);
-                    }
-                });
+                // 常に監視
+                setInterval(fixLinks, 300);
             })();
             </script>`;
 
-            return res.send(ultimateStealer + html);
+            return res.send(inject + html);
         }
 
         const ab = await response.arrayBuffer();
         return res.send(Buffer.from(ab));
-
     } catch (e) {
         return res.send("Error: " + e.message);
     }
