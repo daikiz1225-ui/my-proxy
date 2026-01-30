@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
     const { url: q } = req.query;
-    // URLがなければDuckDuckGo Liteへ
     const target = q ? Buffer.from(q.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString() 
                      : "https://html.duckduckgo.com/html/";
 
@@ -11,54 +10,64 @@ export default async function handler(req, res) {
 
         const ct = r.headers.get('content-type') || '';
         
-        // --- 画像やCSSはブラウザにキャッシュさせて高速化 ---
-        if (!ct.includes('html')) {
+        // 画像は引き続き高速モード（直接読み込み）
+        if (ct.includes('image') || ct.includes('css') || ct.includes('javascript')) {
             res.setHeader('Content-Type', ct);
-            res.setHeader('Cache-Control', 'public, max-age=86400'); // 1日キャッシュ
+            res.setHeader('Cache-Control', 'public, max-age=86400');
             const ab = await r.arrayBuffer();
             return res.send(Buffer.from(ab));
         }
 
-        // --- HTMLの場合：URL奪取スクリプトを注入 ---
+        // --- HTMLの場合の処理 ---
         let h = await r.text();
         const o = new URL(target).origin;
 
-        // 1. 全てのリンク・画像をプロキシ経由に一括変換（画像の高速化処理含む）
+        // 1. リンクと画像の書き換え
         h = h.replace(/(src|href)="([^"]+)"/ig, (m, attr, val) => {
             try {
                 const fullUrl = new URL(val, o).href;
-                // 画像(jpg, png, gif)なら変換せず直接表示させて速度を稼ぐ（i-FILTERが画像単体まで止めていない場合）
-                if (attr === 'src' && /\.(jpg|jpeg|png|gif|svg|webp)/i.test(fullUrl)) {
-                    return `${attr}="${fullUrl}"`;
-                }
+                // 画像は直接、リンクはプロキシ
+                if (attr === 'src' && /\.(jpg|jpeg|png|gif|webp)/i.test(fullUrl)) return `${attr}="${fullUrl}"`;
                 const enc = Buffer.from(fullUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
                 return `${attr}="/api/proxy?url=${enc}"`;
             } catch { return m; }
         });
 
-        // 2. タップした瞬間に「本当のURL」を奪うスクリプト
-        const stealer = `
+        // 2. ★最強の「ダウンロード回避」スクリプト
+        const bypassScript = `
         <script>
-        document.addEventListener('click', e => {
-            const a = e.target.closest('a');
-            if (a && a.href && !a.href.includes(location.host)) {
-                e.preventDefault();
-                let rawUrl = a.href;
-                // DuckDuckGoの転送URL(uddg)があれば抽出
-                if (rawUrl.includes('uddg=')) {
-                    const params = new URLSearchParams(new URL(rawUrl).search);
-                    rawUrl = params.get('uddg');
+        (function() {
+            // リンククリック時の挙動を完全に上書き
+            document.addEventListener('click', e => {
+                const a = e.target.closest('a');
+                if (a && a.href && !a.href.includes(location.host)) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    
+                    let targetUrl = a.href;
+                    // DDGのuddgパラメータがあれば抜く
+                    if (targetUrl.includes('uddg=')) {
+                        targetUrl = new URL(targetUrl).searchParams.get('uddg');
+                    }
+                    
+                    const enc = btoa(unescape(encodeURIComponent(targetUrl))).replace(/\\//g, '_').replace(/\\+/g, '-');
+                    
+                    // 【ここが重要】一度空のページにしてから遷移することでブラウザの「ダウンロード判定」をリセットする
+                    document.body.innerHTML = '<div style="color:white;text-align:center;margin-top:20%;font-family:sans-serif;">Loading...</div>';
+                    window.location.replace("/api/proxy?url=" + enc);
                 }
-                const enc = btoa(unescape(encodeURIComponent(rawUrl))).replace(/\\//g, '_').replace(/\\+/g, '-');
-                window.location.href = "/api/proxy?url=" + enc;
-            }
-        }, true);
+            }, true);
+        })();
         </script>`;
 
+        // ブラウザに「これは絶対Webページだぞ！」と念押しするヘッダー群
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-        return res.send(stealer + h);
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+
+        return res.send(bypassScript + h);
 
     } catch (e) {
-        return res.send("Error");
+        return res.send("<html><body>Error. <a href='/api/proxy'>Retry</a></body></html>");
     }
 }
