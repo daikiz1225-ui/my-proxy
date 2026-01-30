@@ -1,6 +1,6 @@
 export default async function handler(req, res) {
     const { url } = req.query;
-    if (!url) return res.send("Kick Proxy Active.");
+    if (!url) return res.send("Kick Proxy Online.");
 
     try {
         const decodedUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
@@ -9,58 +9,66 @@ export default async function handler(req, res) {
         const response = await fetch(decodedUrl, {
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
                 'Referer': origin
             }
         });
 
-        // ★ここが最大の修正点：相手が何を言おうと、HTMLっぽいなら強制的に text/html に書き換える
-        let contentType = response.headers.get('content-type') || 'text/html';
-        
-        // 怪しい時は強制的にブラウザで開ける形式に固定
-        if (contentType.includes('application/octet-stream') || contentType === '') {
-            contentType = 'text/html; charset=UTF-8';
-        }
-
-        res.setHeader('Content-Type', contentType);
+        const contentType = response.headers.get('content-type') || '';
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
-        // ダウンロードを徹底的に防ぐヘッダー
-        res.setHeader('Content-Disposition', 'inline');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
 
         if (contentType.includes('text/html')) {
-            let html = buffer.toString('utf-8');
+            let html = await response.text();
             const proxyBase = "/api/proxy?url=";
 
-            // パス書き換え（前回より強化：クエリパラメータも逃さない）
+            // HTML内のURLを書き換え
             html = html.replace(/(src|href|srcset|action)="([^"]+)"/g, (match, attr, val) => {
                 try {
-                    let fullUrl;
-                    if (val.startsWith('http')) {
-                        fullUrl = val;
-                    } else if (val.startsWith('//')) {
-                        fullUrl = 'https:' + val;
-                    } else {
-                        fullUrl = new URL(val, origin).href;
-                    }
+                    const fullUrl = new URL(val, origin).href;
                     const enc = Buffer.from(fullUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
                     return `${attr}="${proxyBase}${enc}"`;
                 } catch(e) { return match; }
             });
 
-            return res.send(html);
+            // ★白い画面対策：JavaScriptの通信をすべて強制ジャックするスクリプトを注入
+            const inject = `
+            <script>
+            (function() {
+                const P_URL = "/api/proxy?url=";
+                const encode = (u) => btoa(u).replace(/\\//g, '_').replace(/\\+/g, '-');
+
+                // 1. Fetchをジャック
+                const orgFetch = window.fetch;
+                window.fetch = function(u, i) {
+                    if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) {
+                        u = P_URL + encode(u);
+                    }
+                    return orgFetch(u, i);
+                };
+
+                // 2. XMLHttpRequest(Ajax)をジャック
+                const orgOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(m, u) {
+                    if (typeof u === 'string' && u.startsWith('http') && !u.includes(location.host)) {
+                        u = P_URL + encode(u);
+                    }
+                    return orgOpen.apply(this, arguments);
+                };
+
+                // 3. エラーで止まらないように見守る
+                window.onerror = function() { return true; };
+            })();
+            </script>`;
+
+            // <head> の直後に注入して、他のどのプログラムよりも先に動かす
+            return res.send(html.replace('<head>', '<head>' + inject));
         }
 
-        // HTML以外（画像など）はそのまま流す
-        return res.send(buffer);
+        const arrayBuffer = await response.arrayBuffer();
+        return res.send(Buffer.from(arrayBuffer));
 
     } catch (e) {
-        // エラー時も白い画面やダウンロードにならないよう、ちゃんと文字で出す
-        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-        return res.status(500).send(`<h2>Proxy Error</h2><p>${e.message}</p>`);
+        return res.status(500).send("Error: " + e.message);
     }
 }
