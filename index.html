@@ -3,19 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple Proxy</title>
+    <title>Kick Search V3</title>
     <style>
-        body { background: #000; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        form { width: 90%; max-width: 400px; text-align: center; }
-        input { width: 100%; padding: 15px; border-radius: 30px; border: none; font-size: 16px; outline: none; }
-        button { margin-top: 20px; padding: 10px 30px; border-radius: 20px; border: none; background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
+        body { background: #0a0a0a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
+        .box { width: 90%; max-width: 500px; text-align: center; }
+        h1 { font-style: italic; margin-bottom: 30px; }
+        span { color: #00d4ff; }
+        input { width: 100%; padding: 15px; border-radius: 25px; border: 2px solid #333; background: #222; color: white; font-size: 16px; outline: none; box-sizing: border-box; }
+        button { margin-top: 20px; padding: 12px 40px; border-radius: 25px; border: none; background: #00d4ff; color: #000; font-weight: bold; font-size: 16px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <form action="/api/proxy" method="GET">
-        <h1 style="color:#00d4ff;">Kick Search</h1>
-        <input type="text" name="q" placeholder="検索ワードを入力..." required>
-        <button type="submit">Go</button>
-    </form>
+    <div class="box">
+        <h1>Kick<span>Search</span></h1>
+        <input type="text" id="inp" placeholder="検索ワード または URL(http...)">
+        <button onclick="go()">Go</button>
+    </div>
+
+    <script>
+        function go() {
+            const val = document.getElementById('inp').value.trim();
+            if (!val) return;
+
+            // URLかどうかを判定するロジック
+            // 「http」で始まるか、「.com」などのドットが含まれていてスペースがない場合
+            const isUrl = val.startsWith('http') || (val.includes('.') && !val.includes(' '));
+
+            if (isUrl) {
+                // URLならプロキシへ (httpがない場合は付ける)
+                let target = val.startsWith('http') ? val : 'https://' + val;
+                // Base64エンコードして送信
+                const enc = btoa(unescape(encodeURIComponent(target))).replace(/\//g, '_').replace(/\+/g, '-');
+                window.location.href = "/api/proxy?url=" + enc;
+            } else {
+                // 検索ワードなら検索モードへ
+                window.location.href = "/api/proxy?q=" + encodeURIComponent(val);
+            }
+        }
+
+        // Enterキーでも送信
+        document.getElementById('inp').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') go();
+        });
+    </script>
 </body>
 </html>
