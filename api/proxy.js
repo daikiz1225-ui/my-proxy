@@ -1,100 +1,103 @@
 export default async function handler(req, res) {
-    // 検索ワード(q) または 表示したいURL(url) を取得
     const { q, url } = req.query;
-    const pBase = "/api/proxy?url="; // プロキシのベースURL
+    const pBase = "/api/proxy?url=";
 
-    // エラー防止のおまじない（ヘッダー設定）
+    // 共通設定：ダウンロード回避のおまじない
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    res.setHeader('Cache-Control', 'no-store'); // キャッシュさせない
+    res.setHeader('Content-Disposition', 'inline');
 
     try {
-        // ■ パターンA：検索モード（qがある時）
+        // ■ 検索モード (DuckDuckGo Liteを使用)
         if (q) {
-            // Bingで検索（HTMLだけもらう）
-            const target = `https://www.bing.com/search?q=${encodeURIComponent(q)}`;
-            const response = await fetch(target, {
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            // DuckDuckGoのHTML版にアクセス
+            const response = await fetch("https://html.duckduckgo.com/html/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                },
+                body: `q=${encodeURIComponent(q)}&kl=jp-jp` // 日本語設定
             });
             const html = await response.text();
 
-            // 検索結果から「タイトル」と「URL」だけを無理やり引っこ抜く
+            // 検索結果を抽出 (DuckDuckGoのクラス名は .result__a)
             const results = [];
-            // Bingのリンク構造を探す正規表現
-            const regex = /<li class="b_algo">.*?<h2><a href="(.*?)".*?>(.*?)<\/a><\/h2>/g;
+            const regex = /<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)<\/a>/g;
             let match;
+            
             while ((match = regex.exec(html)) !== null) {
-                const linkUrl = match[1];
-                const title = match[2].replace(/<[^>]*>?/gm, ''); // 余計なタグを消す
-                // リンク先をプロキシ用に暗号化
+                let linkUrl = match[1];
+                let title = match[2].replace(/<[^>]*>?/gm, '');
+
+                // DuckDuckGoの広告や特殊リンクを除外
+                if (linkUrl.startsWith('//') || linkUrl.includes('duckduckgo.com')) continue;
+
+                // URLデコード (DDGはURLエンコードされている場合があるため)
+                try { linkUrl = decodeURIComponent(linkUrl); } catch (e) {}
+
+                // プロキシ用に暗号化
                 const enc = Buffer.from(linkUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
+                
                 results.push(`
-                    <div style="margin-bottom: 20px; padding: 15px; border: 1px solid #333; border-radius: 8px; background: #111;">
-                        <a href="${pBase}${enc}" style="font-size: 18px; color: #4dabf7; text-decoration: none; font-weight: bold; display:block;">${title}</a>
-                        <div style="font-size: 12px; color: #888; margin-top: 5px; word-break: break-all;">${linkUrl}</div>
+                    <div style="margin-bottom: 15px; padding: 15px; background: #1a1a1a; border-radius: 8px; border-left: 4px solid #00d4ff;">
+                        <a href="${pBase}${enc}" style="font-size: 18px; color: #00d4ff; text-decoration: none; font-weight: bold; display:block;">${title}</a>
+                        <div style="font-size: 12px; color: #888; margin-top: 5px;">${linkUrl}</div>
                     </div>
                 `);
             }
 
-            // 自作の検索結果ページを表示
-            const page = `
+            // 自作検索結果画面
+            const ui = `
                 <!DOCTYPE html>
                 <html>
-                <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-                <body style="background:#000; color:#ddd; font-family:sans-serif; padding:10px;">
-                    <div style="max-width:600px; margin:0 auto;">
-                        <form action="/api/proxy" method="GET" style="margin-bottom:20px; display:flex;">
-                            <input name="q" value="${q}" style="flex:1; padding:10px; border-radius:5px 0 0 5px; border:none;">
-                            <button style="padding:10px 20px; border-radius:0 5px 5px 0; border:none; background:#4dabf7; color:white;">検索</button>
-                        </form>
-                        <h3 style="color:#666;">検索結果: ${q}</h3>
-                        ${results.join('') || '<p>結果が取得できませんでした。</p>'}
-                    </div>
+                <body style="background:#0a0a0a; color:white; font-family:sans-serif; padding:20px;">
+                    <button onclick="location.href='/'" style="background:#333; color:white; border:none; padding:8px 15px; border-radius:5px; margin-bottom:20px;">← ホームへ</button>
+                    <h2 style="border-bottom:1px solid #333; padding-bottom:10px;">検索: ${q}</h2>
+                    ${results.length > 0 ? results.join('') : '<p>検索結果が見つかりませんでした。</p>'}
                 </body>
                 </html>
             `;
-            return res.send(page);
+            return res.send(ui);
         }
 
-        // ■ パターンB：プロキシ閲覧モード（urlがある時）
+        // ■ 閲覧モード (URL指定時)
         if (url) {
             const targetUrl = Buffer.from(url.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
+            
             const response = await fetch(targetUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15' }
             });
 
-            // HTML以外（画像など）はそのまま流す
             const contentType = response.headers.get('content-type') || '';
+
+            // 画像などはそのまま流す
             if (!contentType.includes('text/html')) {
                 res.setHeader('Content-Type', contentType);
                 const buffer = await response.arrayBuffer();
                 return res.send(Buffer.from(buffer));
             }
 
-            // HTMLの場合：リンクを書き換えて表示
+            // HTMLの書き換え
             let html = await response.text();
             const origin = new URL(targetUrl).origin;
 
-            // リンク書き換え（ここもシンプルに）
             html = html.replace(/(href|src)="([^"]+)"/g, (match, attr, val) => {
                 try {
-                    // 相対パスを絶対パスに
+                    // httpから始まる絶対パスに変換
                     const absoluteUrl = new URL(val, origin).href;
-                    // プロキシURLに変換
+                    // プロキシURL化
                     const enc = Buffer.from(absoluteUrl).toString('base64').replace(/\//g, '_').replace(/\+/g, '-');
                     return `${attr}="${pBase}${enc}"`;
-                } catch (e) {
-                    return match;
-                }
+                } catch { return match; }
             });
 
-            // ダウンロード回避用：HTMLとして強制出力
-            return res.send(html);
+            // ダウンロード回避のため、HTMLタグを明示して返す
+            return res.send(`<!DOCTYPE html>${html}`);
         }
 
-        return res.send("Error: No Query");
-
     } catch (e) {
-        // エラーが起きてもHTMLで返す（ダイアログを出させないため）
-        return res.send(`<div style="color:red; padding:20px;">エラーが発生しました: ${e.message}</div>`);
+        return res.send(`<div style="color:white">エラー: ${e.message} <br> <a href="/">戻る</a></div>`);
     }
+
+    return res.send("Status OK");
 }
