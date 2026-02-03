@@ -34,7 +34,7 @@ export default async function handler(req, res) {
                 } catch { return m; }
             });
 
-            // --- 🛡️ iPad側でも広告を消すための「追い打ち」スクリプト ---
+            // --- 🛡️ iPad側でも広告を消すための「追い打ち」スクリプト --
             const stealthScript = `
             <style>
                 ${adRules.blockedSelectors.join(', ')} { display: none !important; }
