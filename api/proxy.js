@@ -1,20 +1,12 @@
-import fs from 'fs';
-import path from 'path';
-
 export default async function handler(req, res) {
     const { id } = req.query;
-    if (!id) return res.send("System Active with AdBlock");
+    if (!id) return res.send("System Active: V3 Stealth");
 
-    // --- 🚫 外部ルール(JSON)の読み込み ---
-    let adRules = { blockedDomains: [], blockedSelectors: [] };
-    try {
-        const jsonPath = path.join(process.cwd(), 'api', 'adblock.json');
-        const fileData = fs.readFileSync(jsonPath, 'utf8');
-        adRules = JSON.parse(fileData);
-    } catch (e) {
-        console.error("JSON Load Error:", e);
-        // ファイルが読めなくても止まらないように空リストで続行
-    }
+    // 広告ブロックリスト（コード内に直接書くことでエラーを回避）
+    const adRules = {
+        domains: ["googlesyndication.com", "doubleclick.net", "amazon-adsystem.com", "geniee.jp", "microad.jp"],
+        selectors: [".adsbygoogle", "[id^='ad-']", "iframe[src*='ads']"]
+    };
 
     try {
         const target = Buffer.from(id.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
@@ -29,14 +21,12 @@ export default async function handler(req, res) {
             let html = await response.text();
             const origin = new URL(target).origin;
 
-            // 広告ドメインの削除
-            adRules.blockedDomains.forEach(domain => {
-                const escaped = domain.replace(/\./g, '\\.');
-                const regex = new RegExp(`<script.*?src=".*?${escaped}.*?"><\\/script>`, 'gi');
-                html = html.replace(regex, '');
+            // 広告削除
+            adRules.domains.forEach(d => {
+                html = html.replace(new RegExp('<script.*?src=".*?'+d+'.*?"><\\/script>', 'gi'), '');
             });
 
-            // リンクと画像の書き換え
+            // リンク書き換え (id方式)
             html = html.replace(/(href|src)="([^"]+)"/g, (m, attr, val) => {
                 try {
                     const abs = new URL(val, origin).href;
@@ -46,23 +36,13 @@ export default async function handler(req, res) {
                 } catch { return m; }
             });
 
-            // CSSによる非表示
-            const stealthScript = `
-            <style>
-                ${adRules.blockedSelectors.join(', ')} { display: none !important; }
-            </style>
-            <script>
-                window.adsbygoogle = window.adsbygoogle || [];
-                window.adsbygoogle.push = function() {};
-            </script>`;
-
-            return res.send(stealthScript + html);
+            const stealth = `<style>${adRules.selectors.join(',')}{display:none!important;}</style>
+            <script>window.adsbygoogle={push:function(){}};window.ga=function(){};</script>`;
+            return res.send(stealth + html);
         }
-
         const buffer = await response.arrayBuffer();
         return res.send(Buffer.from(buffer));
-
     } catch (e) {
-        return res.status(404).send("Not Found");
+        return res.status(500).send("Update Success but Site Error: " + e.message);
     }
 }
