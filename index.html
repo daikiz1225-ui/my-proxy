@@ -3,42 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stealth Search</title>
+    <title>Kick Search</title>
     <style>
-        body { background: #0f0f0f; color: #00d4ff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .container { width: 90%; max-width: 450px; text-align: center; }
-        h1 { font-style: italic; letter-spacing: 2px; margin-bottom: 20px; }
-        input { width: 100%; padding: 15px; border-radius: 30px; border: 2px solid #333; background: #1a1a1a; color: white; font-size: 16px; outline: none; box-sizing: border-box; transition: 0.3s; }
-        input:focus { border-color: #00d4ff; box-shadow: 0 0 10px #00d4ff; }
-        .tips { margin-top: 15px; color: #666; font-size: 12px; }
+        body { background: #000; color: #fff; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .logo { font-size: 3rem; font-weight: bold; font-style: italic; color: #ff3e3e; text-shadow: 3px 3px #fff; margin-bottom: 20px; }
+        .logo span { color: #fff; text-shadow: 3px 3px #ff3e3e; }
+        input { width: 85%; max-width: 500px; padding: 15px 25px; border-radius: 50px; border: none; background: #222; color: #fff; font-size: 18px; box-shadow: 0 0 15px rgba(255,255,255,0.1); outline: none; transition: 0.3s; }
+        input:focus { background: #333; box-shadow: 0 0 20px rgba(255,62,62,0.5); }
+        .footer { margin-top: 20px; font-size: 12px; color: #555; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>STEALTH<span>SEARCH</span></h1>
-        <input type="text" id="inp" placeholder="URLを入力 または 検索ワード" autofocus>
-        <div class="tips">EnterキーでGo</div>
-    </div>
+    <div class="logo">KICK<span>SEARCH</span></div>
+    <input type="text" id="inp" placeholder="URLまたはキーワードを入力..." autofocus>
+    <div class="footer">Kick Search Engine v3.0</div>
 
     <script>
         document.getElementById('inp').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const val = e.target.value.trim();
                 if (!val) return;
-
-                let targetUrl = val;
-                // URLか検索ワードか判定
+                let target = val;
                 const isUrl = val.startsWith('http') || (val.includes('.') && !val.includes(' '));
-                
                 if (!isUrl) {
-                    // 検索ならGoogleへ
-                    targetUrl = "https://www.google.com/search?q=" + encodeURIComponent(val);
+                    target = "https://www.google.com/search?q=" + encodeURIComponent(val);
                 } else if (!val.startsWith('http')) {
-                    targetUrl = "https://" + val;
+                    target = "https://" + val;
                 }
-
-                // 最新の「id=」方式にエンコードして送信
-                const enc = btoa(unescape(encodeURIComponent(targetUrl))).replace(/\//g, '_').replace(/\+/g, '-');
+                const enc = btoa(unescape(encodeURIComponent(target))).replace(/\//g, '_').replace(/\+/g, '-');
                 window.location.href = "/api/proxy?id=" + enc;
             }
         });
