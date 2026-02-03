@@ -3,47 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kick Search V3</title>
+    <title>Stealth Search</title>
     <style>
-        body { background: #0a0a0a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; }
-        .box { width: 90%; max-width: 500px; text-align: center; }
-        h1 { font-style: italic; margin-bottom: 30px; }
-        span { color: #00d4ff; }
-        input { width: 100%; padding: 15px; border-radius: 25px; border: 2px solid #333; background: #222; color: white; font-size: 16px; outline: none; box-sizing: border-box; }
-        button { margin-top: 20px; padding: 12px 40px; border-radius: 25px; border: none; background: #00d4ff; color: #000; font-weight: bold; font-size: 16px; cursor: pointer; }
+        body { background: #0f0f0f; color: #00d4ff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { width: 90%; max-width: 450px; text-align: center; }
+        h1 { font-style: italic; letter-spacing: 2px; margin-bottom: 20px; }
+        input { width: 100%; padding: 15px; border-radius: 30px; border: 2px solid #333; background: #1a1a1a; color: white; font-size: 16px; outline: none; box-sizing: border-box; transition: 0.3s; }
+        input:focus { border-color: #00d4ff; box-shadow: 0 0 10px #00d4ff; }
+        .tips { margin-top: 15px; color: #666; font-size: 12px; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h1>Kick<span>Search</span></h1>
-        <input type="text" id="inp" placeholder="検索ワード または URL(http...)">
-        <button onclick="go()">Go</button>
+    <div class="container">
+        <h1>STEALTH<span>SEARCH</span></h1>
+        <input type="text" id="inp" placeholder="URLを入力 または 検索ワード" autofocus>
+        <div class="tips">EnterキーでGo</div>
     </div>
 
     <script>
-        function go() {
-            const val = document.getElementById('inp').value.trim();
-            if (!val) return;
-
-            // URLかどうかを判定するロジック
-            // 「http」で始まるか、「.com」などのドットが含まれていてスペースがない場合
-            const isUrl = val.startsWith('http') || (val.includes('.') && !val.includes(' '));
-
-            if (isUrl) {
-                // URLならプロキシへ (httpがない場合は付ける)
-                let target = val.startsWith('http') ? val : 'https://' + val;
-                // Base64エンコードして送信
-                const enc = btoa(unescape(encodeURIComponent(target))).replace(/\//g, '_').replace(/\+/g, '-');
-                window.location.href = "/api/proxy?url=" + enc;
-            } else {
-                // 検索ワードなら検索モードへ
-                window.location.href = "/api/proxy?q=" + encodeURIComponent(val);
-            }
-        }
-
-        // Enterキーでも送信
         document.getElementById('inp').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') go();
+            if (e.key === 'Enter') {
+                const val = e.target.value.trim();
+                if (!val) return;
+
+                let targetUrl = val;
+                // URLか検索ワードか判定
+                const isUrl = val.startsWith('http') || (val.includes('.') && !val.includes(' '));
+                
+                if (!isUrl) {
+                    // 検索ならGoogleへ
+                    targetUrl = "https://www.google.com/search?q=" + encodeURIComponent(val);
+                } else if (!val.startsWith('http')) {
+                    targetUrl = "https://" + val;
+                }
+
+                // 最新の「id=」方式にエンコードして送信
+                const enc = btoa(unescape(encodeURIComponent(targetUrl))).replace(/\//g, '_').replace(/\+/g, '-');
+                window.location.href = "/api/proxy?id=" + enc;
+            }
         });
     </script>
 </body>
