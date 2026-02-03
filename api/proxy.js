@@ -1,8 +1,20 @@
-import adRules from './adblock.json'; // 新しいファイルを読み込む
+import fs from 'fs';
+import path from 'path';
 
 export default async function handler(req, res) {
     const { id } = req.query;
     if (!id) return res.send("System Active with AdBlock");
+
+    // --- 🚫 外部ルール(JSON)の読み込み ---
+    let adRules = { blockedDomains: [], blockedSelectors: [] };
+    try {
+        const jsonPath = path.join(process.cwd(), 'api', 'adblock.json');
+        const fileData = fs.readFileSync(jsonPath, 'utf8');
+        adRules = JSON.parse(fileData);
+    } catch (e) {
+        console.error("JSON Load Error:", e);
+        // ファイルが読めなくても止まらないように空リストで続行
+    }
 
     try {
         const target = Buffer.from(id.replace(/_/g, '/').replace(/-/g, '+'), 'base64').toString();
@@ -17,14 +29,14 @@ export default async function handler(req, res) {
             let html = await response.text();
             const origin = new URL(target).origin;
 
-            // --- 🚫 外部ファイル(JSON)を使った動的ブロック ---
+            // 広告ドメインの削除
             adRules.blockedDomains.forEach(domain => {
                 const escaped = domain.replace(/\./g, '\\.');
-                const regex = new URL(target).origin.includes(domain) ? null : new RegExp(`<script.*?src=".*?${escaped}.*?"><\\/script>`, 'gi');
-                if (regex) html = html.replace(regex, '');
+                const regex = new RegExp(`<script.*?src=".*?${escaped}.*?"><\\/script>`, 'gi');
+                html = html.replace(regex, '');
             });
 
-            // --- 🔗 リンクと画像の書き換え ---
+            // リンクと画像の書き換え
             html = html.replace(/(href|src)="([^"]+)"/g, (m, attr, val) => {
                 try {
                     const abs = new URL(val, origin).href;
@@ -34,15 +46,14 @@ export default async function handler(req, res) {
                 } catch { return m; }
             });
 
-            // --- 🛡️ iPad側でも広告を消すための「追い打ち」スクリプト --
+            // CSSによる非表示
             const stealthScript = `
             <style>
                 ${adRules.blockedSelectors.join(', ')} { display: none !important; }
             </style>
             <script>
-                // 広告ブロック検知を回避するフェイク
                 window.adsbygoogle = window.adsbygoogle || [];
-                window.ga = function() {};
+                window.adsbygoogle.push = function() {};
             </script>`;
 
             return res.send(stealthScript + html);
