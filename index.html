@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Kick Search</title>
+    <style>
+        body { background: #000; color: #fff; text-align: center; font-family: sans-serif; padding-top: 100px; }
+        input { width: 80%; max-width: 500px; padding: 15px; border-radius: 25px; border: none; font-size: 18px; }
+        button { padding: 10px 20px; border-radius: 20px; border: none; background: #ff3e3e; color: #fff; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>KICK SEARCH</h1>
+    <input type="text" id="urlInput" placeholder="https://game8.jp">
+    <br>
+    <button onclick="go()">GO</button>
+
+    <script>
+        function go() {
+            let val = document.getElementById('urlInput').value.trim();
+            if (!val) return;
+            // httpがなければつける
+            if (!val.startsWith('http')) val = 'https://' + val;
+            
+            // シンプルにそのまま送る！
+            window.location.href = "/api/proxy?url=" + encodeURIComponent(val);
+        }
+        // Enterキーでも動くようにする
+        document.getElementById('urlInput').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+    </script>
+</body>
+</html>
